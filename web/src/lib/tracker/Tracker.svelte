@@ -370,6 +370,7 @@
   }
 
   .item-row {
+    position: relative;
     display: flex;
     align-items: center;
   }
@@ -379,14 +380,24 @@
     min-width: 0;
   }
 
+  /* Overlays the task count on hover instead of reserving width. */
   .move {
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    right: 4px;
     display: flex;
+    align-items: center;
+    padding-left: 12px;
+    background: linear-gradient(to right, transparent, var(--surface) 12px);
     opacity: 0;
+    pointer-events: none;
   }
 
   .item-row:hover .move,
   .move:focus-within {
     opacity: 1;
+    pointer-events: auto;
   }
 
   .move button {

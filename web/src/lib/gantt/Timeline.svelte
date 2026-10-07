@@ -1102,6 +1102,7 @@
   }
 
   .proj-head {
+    position: relative;
     display: flex;
     align-items: center;
     gap: 6px;
@@ -1125,16 +1126,26 @@
     font-size: 12px;
   }
 
+  /* Overlays the end of the header on hover instead of reserving width,
+     so project names use the full sidebar when not hovered. */
   .proj-actions {
-    margin-left: auto;
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    right: 6px;
     display: flex;
+    align-items: center;
+    padding-left: 16px;
+    background: linear-gradient(to right, transparent, var(--surface) 16px);
     opacity: 0;
+    pointer-events: none;
     transition: opacity 0.1s;
   }
 
   .proj:hover .proj-actions,
   .proj-actions:focus-within {
     opacity: 1;
+    pointer-events: auto;
   }
 
   .sidebar .empty {
