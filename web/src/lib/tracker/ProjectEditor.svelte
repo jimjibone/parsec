@@ -2,6 +2,7 @@
   import { app } from '../state.svelte';
   import { ui } from '../ui.svelte';
   import Icon from '../Icon.svelte';
+  import { TwoClick } from '../confirm.svelte';
   import { formatLong, toDay, toISO, today } from '../dates';
   import { PROJECT_COLORS, type Milestone, type Project } from '../types';
 
@@ -24,11 +25,20 @@
     save({ milestones: project.milestones.filter((_, j) => j !== i) });
   }
 
+  const confirmDelete = new TwoClick();
+  const taskCount = $derived(app.tasks.filter((t) => t.projectId === project.id).length);
+
+  $effect(() => {
+    void project.id;
+    confirmDelete.reset();
+  });
+
   async function remove() {
-    const n = app.tasks.filter((t) => t.projectId === project.id).length;
-    if (!confirm(`Delete project "${project.name}" and its ${n} task${n === 1 ? '' : 's'}?`)) return;
+    if (!confirmDelete.hit(project.id)) return;
+    // Read the id first: clearing the selection unbinds the `project` prop.
+    const id = project.id;
     ui.trackerProject = '';
-    await app.deleteProject(project.id);
+    await app.deleteProject(id);
   }
 </script>
 
@@ -55,7 +65,14 @@
       <input type="color" value={project.color} onchange={(e) => save({ color: e.currentTarget.value })} title="Custom colour" />
     </div>
     <div class="spacer"></div>
-    <button class="ghost danger" onclick={remove}><Icon name="trash" /> Delete project</button>
+    <button class="ghost danger" class:armed={confirmDelete.is(project.id)} onclick={remove} onblur={() => confirmDelete.reset()}>
+      <Icon name="trash" />
+      {#if confirmDelete.is(project.id)}
+        Delete project and {taskCount} task{taskCount === 1 ? '' : 's'}?
+      {:else}
+        Delete project
+      {/if}
+    </button>
   </div>
 
   {#key project.id}
@@ -143,6 +160,10 @@
 
   .spacer {
     flex: 1;
+  }
+
+  .armed {
+    background: var(--danger-soft);
   }
 
   .ms-head {

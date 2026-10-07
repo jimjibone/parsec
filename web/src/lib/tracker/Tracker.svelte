@@ -3,6 +3,7 @@
   import { ui } from '../ui.svelte';
   import Icon from '../Icon.svelte';
   import ProjectEditor from './ProjectEditor.svelte';
+  import { TwoClick } from '../confirm.svelte';
   import { formatShort, toDay, toISO, today } from '../dates';
   import { STATUSES, type Task } from '../types';
 
@@ -102,9 +103,12 @@
     if (p && name && name !== p.name) app.savePerson({ ...p, name });
   }
 
+  const confirmRemove = new TwoClick();
+
   async function deletePerson(id: string) {
-    const p = app.personById.get(id);
-    if (p && confirm(`Remove ${p.name}? They will be unassigned from all tasks.`)) await app.deletePerson(id);
+    if (!confirmRemove.hit(id)) return;
+    if (assigneeFilter === id) assigneeFilter = '';
+    await app.deletePerson(id);
   }
 
   function setStatus(t: Task, status: Task['status']) {
@@ -177,8 +181,15 @@
             {p.name}
             <span class="n">{app.tasks.filter((t) => t.assignees.includes(p.id) && t.status !== 'done').length}</span>
           </button>
-          <button class="ghost icon-btn rm" onclick={() => deletePerson(p.id)} aria-label="Remove person"
-            ><Icon name="x" size={14} /></button
+          <button
+            class="ghost rm"
+            class:icon-btn={!confirmRemove.is(p.id)}
+            class:armed={confirmRemove.is(p.id)}
+            onclick={() => deletePerson(p.id)}
+            onblur={() => confirmRemove.reset()}
+            aria-label="Remove person"
+            title={confirmRemove.is(p.id) ? 'Click again to remove and unassign from all tasks' : 'Remove person'}
+            ><Icon name="x" size={14} />{#if confirmRemove.is(p.id)}Remove?{/if}</button
           >
         {/if}
       </div>
@@ -372,8 +383,16 @@
     opacity: 0;
   }
 
-  .person:hover .rm {
+  .person:hover .rm,
+  .person .rm.armed {
     opacity: 1;
+  }
+
+  .rm.armed {
+    padding: 2px 6px;
+    gap: 2px;
+    color: var(--danger);
+    background: var(--danger-soft);
   }
 
   .side input {

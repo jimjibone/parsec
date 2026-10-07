@@ -3,6 +3,7 @@
   import { app } from '../state.svelte';
   import { ui, DAY_WIDTH, type Zoom } from '../ui.svelte';
   import Icon from '../Icon.svelte';
+  import { TwoClick } from '../confirm.svelte';
   import {
     addMonths,
     dayOfMonth,
@@ -364,7 +365,7 @@
   }
 
   function startPan(ev: PointerEvent) {
-    if (ev.button !== 0 || (ev.target as Element).closest('[data-task-id], .milestone')) return;
+    if (ev.button !== 0 || (ev.target as Element).closest('[data-task-id], .milestone, .dep')) return;
     pan = { px: ev.clientX, py: ev.clientY, sl: scroller.scrollLeft, st: scroller.scrollTop, moved: false };
   }
 
@@ -435,8 +436,24 @@
     } else if (pan) {
       const p = pan;
       pan = null;
-      if (!p.moved) ui.selectedTask = null;
+      if (!p.moved) {
+        ui.selectedTask = null;
+        confirmArrow.reset();
+      }
     }
+  }
+
+  // Clicking an arrow arms it; clicking it again removes the dependency.
+  const confirmArrow = new TwoClick();
+
+  function removeArrow(a: Arrow) {
+    if (confirmArrow.hit(a.key)) {
+      app.removeDependency(a.to, a.from);
+      return;
+    }
+    const f = app.taskById.get(a.from)?.title;
+    const t = app.taskById.get(a.to)?.title;
+    app.toast(`Click the arrow again to remove "${f}" -> "${t}".`, 'info');
   }
 
   async function onCanvasDblClick(ev: MouseEvent) {
@@ -727,21 +744,12 @@
               </marker>
             </defs>
             {#each arrows as a (a.key)}
-              <g class="dep" class:bad={a.bad}>
-                <path
-                  class="hit"
-                  d={a.d}
-                  onclick={() => {
-                    const f = app.taskById.get(a.from)?.title;
-                    const t = app.taskById.get(a.to)?.title;
-                    if (confirm(`Remove dependency "${f}" -> "${t}"?`)) app.removeDependency(a.to, a.from);
-                  }}
-                  role="presentation"
-                >
+              <g class="dep" class:bad={a.bad} class:armed={confirmArrow.is(a.key)}>
+                <path class="hit" d={a.d} onclick={() => removeArrow(a)} role="presentation">
                   <title
                     >{app.taskById.get(a.from)?.title} must finish before {app.taskById.get(a.to)?.title} starts{a.bad
                       ? ' (violated)'
-                      : ''}. Click to remove.</title
+                      : ''}. Click twice to remove.</title
                   >
                 </path>
                 <path class="line" d={a.d} marker-end={a.bad ? 'url(#arrow-bad)' : 'url(#arrow)'} />
@@ -1196,6 +1204,12 @@
 
   .dep.bad .line {
     stroke: var(--danger);
+  }
+
+  .dep.armed .line {
+    stroke: var(--danger);
+    stroke-width: 2.5;
+    stroke-dasharray: 5 3;
   }
 
   .head {
