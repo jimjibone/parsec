@@ -127,6 +127,9 @@ func (s *Store) Snapshot() Snapshot {
 	}
 	sort.Slice(snap.Projects, func(i, j int) bool {
 		a, b := snap.Projects[i], snap.Projects[j]
+		if a.Order != b.Order {
+			return a.Order < b.Order
+		}
 		if a.Created != b.Created {
 			return a.Created < b.Created
 		}
@@ -161,6 +164,11 @@ func (s *Store) CreateProject(p Project) (Project, error) {
 	defer s.mu.Unlock()
 	p.ID = s.newID()
 	p.Created = now()
+	// New projects go last.
+	p.Order = 0
+	for _, x := range s.projects {
+		p.Order = max(p.Order, x.Order+1)
+	}
 	if err := s.validateProject(&p); err != nil {
 		return Project{}, err
 	}
@@ -179,6 +187,7 @@ func (s *Store) UpdateProject(p Project) (Project, error) {
 		return Project{}, ErrNotFound
 	}
 	p.Created = old.Created
+	p.Order = old.Order // changed only via ReorderProjects
 	if err := s.validateProject(&p); err != nil {
 		return Project{}, err
 	}
@@ -187,6 +196,40 @@ func (s *Store) UpdateProject(p Project) (Project, error) {
 	}
 	s.projects[p.ID] = &p
 	return normProject(p), nil
+}
+
+// ReorderProjects sets the display order. ids must list every project
+// exactly once; only projects whose position changed are rewritten.
+func (s *Store) ReorderProjects(ids []string) ([]Project, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if len(ids) != len(s.projects) {
+		return nil, invalid("reorder must list all %d projects, got %d", len(s.projects), len(ids))
+	}
+	seen := map[string]bool{}
+	for _, id := range ids {
+		if _, ok := s.projects[id]; !ok {
+			return nil, invalid("unknown project %q", id)
+		}
+		if seen[id] {
+			return nil, invalid("project %q listed twice", id)
+		}
+		seen[id] = true
+	}
+	out := make([]Project, 0, len(ids))
+	for i, id := range ids {
+		p := s.projects[id]
+		if p.Order != i {
+			next := *p
+			next.Order = i
+			if err := s.writeProject(&next); err != nil {
+				return nil, err
+			}
+			s.projects[id] = &next
+		}
+		out = append(out, normProject(*s.projects[id]))
+	}
+	return out, nil
 }
 
 // DeleteProject removes a project, its tasks, and any dependencies on them.

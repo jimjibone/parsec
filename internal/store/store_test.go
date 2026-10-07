@@ -87,6 +87,45 @@ func TestValidation(t *testing.T) {
 	}
 }
 
+func TestReorderProjects(t *testing.T) {
+	s, dir := mustOpen(t)
+	a, _ := s.CreateProject(Project{Name: "A"})
+	b, _ := s.CreateProject(Project{Name: "B"})
+	c, _ := s.CreateProject(Project{Name: "C"})
+	names := func(st *Store) string {
+		out := ""
+		for _, p := range st.Snapshot().Projects {
+			out += p.Name
+		}
+		return out
+	}
+	if got := names(s); got != "ABC" {
+		t.Fatalf("initial order %q", got)
+	}
+	if _, err := s.ReorderProjects([]string{c.ID, a.ID, b.ID}); err != nil {
+		t.Fatal(err)
+	}
+	// Order survives a reload and a full-object update.
+	s2, err := Open(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	a.Name = "A2"
+	a.Order = 99
+	if _, err := s2.UpdateProject(a); err != nil {
+		t.Fatal(err)
+	}
+	if got := names(s2); got != "CA2B" {
+		t.Fatalf("after reorder %q", got)
+	}
+	var ve *ValidationError
+	for _, ids := range [][]string{{a.ID, b.ID}, {a.ID, a.ID, b.ID}, {a.ID, b.ID, "nope"}} {
+		if _, err := s2.ReorderProjects(ids); !errors.As(err, &ve) {
+			t.Errorf("ids %v: err = %v", ids, err)
+		}
+	}
+}
+
 func TestPersonColor(t *testing.T) {
 	s, _ := mustOpen(t)
 	p, err := s.CreatePerson(Person{Name: "carol", Color: "#AABBCC"})

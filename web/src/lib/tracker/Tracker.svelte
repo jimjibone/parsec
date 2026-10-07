@@ -136,12 +136,25 @@
     <button class="item" class:active={!selected} onclick={() => (ui.trackerProject = '')}>
       <span class="dot all"></span> All tasks <span class="n">{app.tasks.length}</span>
     </button>
-    {#each app.projects as p (p.id)}
-      <button class="item" class:active={selected?.id === p.id} onclick={() => (ui.trackerProject = p.id)}>
-        <span class="dot" style:background={p.color}></span>
-        <span class="label">{p.name}</span>
-        <span class="n">{app.tasks.filter((t) => t.projectId === p.id).length}</span>
-      </button>
+    {#each app.projects as p, i (p.id)}
+      <div class="item-row">
+        <button class="item" class:active={selected?.id === p.id} onclick={() => (ui.trackerProject = p.id)}>
+          <span class="dot" style:background={p.color}></span>
+          <span class="label">{p.name}</span>
+          <span class="n">{app.tasks.filter((t) => t.projectId === p.id).length}</span>
+        </button>
+        <div class="move">
+          <button class="ghost icon-btn" disabled={i === 0} onclick={() => app.moveProject(p.id, -1)} title="Move project up"
+            ><Icon name="up" size={12} /></button
+          >
+          <button
+            class="ghost icon-btn"
+            disabled={i === app.projects.length - 1}
+            onclick={() => app.moveProject(p.id, 1)}
+            title="Move project down"><Icon name="down" size={12} /></button
+          >
+        </div>
+      </div>
     {/each}
     {#if newProject !== null}
       <input
@@ -354,6 +367,30 @@
     border: 0;
     background: transparent;
     gap: 8px;
+  }
+
+  .item-row {
+    display: flex;
+    align-items: center;
+  }
+
+  .item-row .item {
+    flex: 1;
+    min-width: 0;
+  }
+
+  .move {
+    display: flex;
+    opacity: 0;
+  }
+
+  .item-row:hover .move,
+  .move:focus-within {
+    opacity: 1;
+  }
+
+  .move button {
+    padding: 2px;
   }
 
   .item.active,

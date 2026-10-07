@@ -19,6 +19,8 @@ export interface Project {
   description: string;
   color: string;
   milestones: Milestone[];
+  /** Display position, ascending. Changed only via the reorder endpoint. */
+  order: number;
   created: string;
 }
 

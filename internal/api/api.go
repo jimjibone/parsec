@@ -41,6 +41,16 @@ func (s *Server) Handler() http.Handler {
 		}
 		respond(w)(s.store.CreateProject(p))
 	}))
+	// Body: {"ids": [...]} listing every project in the new order.
+	mux.HandleFunc("PUT /api/projects/order", s.locked(func(w http.ResponseWriter, r *http.Request) {
+		var body struct {
+			IDs []string `json:"ids"`
+		}
+		if !readJSON(w, r, &body) {
+			return
+		}
+		respond(w)(s.store.ReorderProjects(body.IDs))
+	}))
 	mux.HandleFunc("PUT /api/projects/{id}", s.locked(func(w http.ResponseWriter, r *http.Request) {
 		var p store.Project
 		if !readJSON(w, r, &p) {

@@ -473,6 +473,15 @@
     if (t) ui.selectedTask = t.id;
   }
 
+  // Hidden projects are skipped so each move visibly changes the order.
+  function moveProject(id: string, dir: -1 | 1) {
+    app.moveProject(
+      id,
+      dir,
+      layout.rows.map((r) => r.project.id),
+    );
+  }
+
   async function addTaskTo(p: Project) {
     if (ui.collapsed.includes(p.id)) ui.toggleCollapsed(p.id);
     const start = Math.round(centerDay()) - 1;
@@ -668,7 +677,7 @@
       <div class="body-row" style:height="{bodyH}px">
         <!-- sidebar -->
         <div class="sidebar">
-          {#each layout.rows as r (r.project.id)}
+          {#each layout.rows as r, ri (r.project.id)}
             {@const p = r.project}
             {@const count = app.tasks.filter((t) => t.projectId === p.id).length}
             <div class="proj" style:top="{r.top}px" style:height="{r.height}px">
@@ -695,6 +704,15 @@
                   <span class="count muted">{count}</span>
                 {/if}
                 <div class="proj-actions">
+                  <button class="ghost icon-btn" disabled={ri === 0} onclick={() => moveProject(p.id, -1)} title="Move project up"
+                    ><Icon name="up" size={14} /></button
+                  >
+                  <button
+                    class="ghost icon-btn"
+                    disabled={ri === layout.rows.length - 1}
+                    onclick={() => moveProject(p.id, 1)}
+                    title="Move project down"><Icon name="down" size={14} /></button
+                  >
                   <button class="ghost icon-btn" onclick={() => addTaskTo(p)} title="Add task"><Icon name="plus" /></button>
                   <button class="ghost icon-btn" onclick={() => ui.setHidden(p.id, true)} title="Hide project"
                     ><Icon name="eyeOff" /></button

@@ -206,6 +206,25 @@ class AppState {
     if (saved) this.projects = this.projects.map((x) => (x.id === saved.id ? saved : x));
   }
 
+  /**
+   * Move a project one step up (-1) or down (+1). `among` limits which
+   * projects count as neighbours (e.g. only those visible on the timeline),
+   * so a move always passes a visible project.
+   */
+  async moveProject(id: string, dir: -1 | 1, among: string[] = this.projects.map((p) => p.id)) {
+    const i = among.indexOf(id);
+    const neighbour = among[i + dir];
+    if (i < 0 || !neighbour) return;
+    const ids = this.projects.map((p) => p.id).filter((x) => x !== id);
+    const at = ids.indexOf(neighbour) + (dir > 0 ? 1 : 0);
+    ids.splice(at, 0, id);
+
+    const byId = this.projectById;
+    this.projects = ids.map((x, order) => ({ ...byId.get(x)!, order })); // optimistic
+    const saved = await this.run(() => api.reorderProjects(ids));
+    if (saved) this.projects = saved;
+  }
+
   async deleteProject(id: string) {
     this.projects = this.projects.filter((p) => p.id !== id);
     this.tasks = this.tasks.filter((t) => t.projectId !== id);

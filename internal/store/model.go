@@ -14,7 +14,9 @@ type Project struct {
 	Description string      `yaml:"description,omitempty" json:"description"`
 	Color       string      `yaml:"color,omitempty" json:"color"`
 	Milestones  []Milestone `yaml:"milestones,omitempty" json:"milestones"`
-	Created     string      `yaml:"created,omitempty" json:"created"`
+	// Order is the display position (ascending); ties fall back to Created.
+	Order   int    `yaml:"order,omitempty" json:"order"`
+	Created string `yaml:"created,omitempty" json:"created"`
 }
 
 // Task is a unit of work with a date range on the timeline.

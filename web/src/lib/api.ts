@@ -31,6 +31,7 @@ export const api = {
   createProject: (p: Partial<Project>) => req<Project>('POST', '/api/projects', p),
   updateProject: (p: Project) => req<Project>('PUT', `/api/projects/${p.id}`, p),
   deleteProject: (id: string) => req<Changed>('DELETE', `/api/projects/${id}`),
+  reorderProjects: (ids: string[]) => req<Project[]>('PUT', '/api/projects/order', { ids }),
 
   createTask: (t: Partial<Task>) => req<Task>('POST', '/api/tasks', t),
   updateTasks: (ts: Task[]) => req<Task[]>('PUT', '/api/tasks', ts),
