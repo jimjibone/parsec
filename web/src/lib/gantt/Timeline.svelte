@@ -20,6 +20,7 @@
     year,
   } from '../dates';
   import { resizeEnd, resizeStart, shiftSpan } from '../schedule';
+  import { barLayout, type BarLayout } from './barlayout';
   import type { Project, Task } from '../types';
   import { STATUSES } from '../types';
 
@@ -767,11 +768,22 @@
             {/if}
           </svg>
 
+          {#snippet pills(t: Task, lay: BarLayout)}
+            {#if lay.shown || lay.more}
+              <span class="who"
+                >{#each t.assignees.slice(0, lay.shown) as a (a)}<span class="av">{initials(a)}</span>{/each}{#if lay.more}<span
+                    class="av more">{lay.shown ? '+' : ''}{lay.more}</span
+                  >{/if}</span
+              >
+            {/if}
+          {/snippet}
+
           {#each app.tasks as t (t.id)}
             {@const g = geo.get(t.id)}
             {#if g}
               {@const p = app.projectById.get(t.projectId)}
-              {@const outside = g.w < Math.min(220, t.title.length * 7 + 20)}
+              {@const room = labelRoom.get(t.id) ?? Infinity}
+              {@const lay = barLayout(g.w, t.title.length, t.assignees.length, room)}
               <div
                 class="bar {t.status}"
                 class:selected={ui.selectedTask === t.id}
@@ -798,13 +810,11 @@
                   ></div>
                 {/if}
                 <div class="handle l" onpointerdown={(e) => startDrag(e, t, 'start')} role="presentation"></div>
-                {#if !outside}
+                {#if lay.titleInside}
                   <span class="label">{t.title}</span>
-                  {#if t.assignees.length && g.w > 140}
-                    <span class="who"
-                      >{#each t.assignees.slice(0, 3) as a (a)}<span class="av">{initials(a)}</span>{/each}</span
-                    >
-                  {/if}
+                {/if}
+                {#if lay.pillsInside}
+                  {@render pills(t, lay)}
                 {/if}
                 <div class="handle r" onpointerdown={(e) => startDrag(e, t, 'end')} role="presentation"></div>
                 <div
@@ -814,15 +824,17 @@
                   role="presentation"
                 ></div>
               </div>
-              {@const room = labelRoom.get(t.id) ?? Infinity}
-              {#if outside && room >= 30}
+              {#if !lay.titleInside && room >= 30}
                 <span
                   class="outside-label"
                   style:left="{g.x + g.w + 18}px"
                   style:top="{g.y}px"
-                  style:line-height="{BAR_H}px"
-                  style:max-width={room === Infinity ? null : `${room}px`}>{t.title}</span
+                  style:height="{BAR_H}px"
+                  style:max-width={room === Infinity ? null : `${room}px`}
                 >
+                  {#if !lay.pillsInside}{@render pills(t, lay)}{/if}
+                  <span class="ot">{t.title}</span>
+                </span>
               {/if}
             {/if}
           {/each}
@@ -1315,28 +1327,49 @@
     text-shadow: 0 1px 1px rgba(0, 0, 0, 0.25);
   }
 
+  /* Pill sizes are mirrored in barlayout.ts. */
   .who {
     display: flex;
+    flex: none;
     gap: 2px;
   }
 
+  .bar .who {
+    margin-left: auto;
+  }
+
   .av {
-    font-size: 9px;
-    font-weight: 700;
+    min-width: 18px;
     padding: 1px 3px;
     border-radius: 3px;
+    font-size: 9px;
+    font-weight: 700;
+    line-height: 12px;
+    text-align: center;
     background: rgba(0, 0, 0, 0.22);
   }
 
   .outside-label {
     position: absolute;
     z-index: 3;
+    display: flex;
+    align-items: center;
+    gap: 6px;
     font-size: 12px;
     white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
     pointer-events: none;
     color: var(--text-2);
+  }
+
+  .outside-label .av {
+    background: var(--surface-3);
+    color: var(--text);
+  }
+
+  .ot {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    min-width: 0;
   }
 
   .handle {
