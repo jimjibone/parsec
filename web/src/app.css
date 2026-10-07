@@ -1,0 +1,223 @@
+:root {
+  color-scheme: light;
+  --bg: #f6f7f9;
+  --surface: #ffffff;
+  --surface-2: #f0f2f5;
+  --surface-3: #e6e9ee;
+  --border: #dfe2e8;
+  --border-strong: #c9ced8;
+  --text: #1b1e25;
+  --text-2: #5c6372;
+  --text-3: #8a91a0;
+  --accent: #4f6bed;
+  --accent-text: #ffffff;
+  --accent-soft: rgba(79, 107, 237, 0.12);
+  --danger: #d23c3c;
+  --danger-soft: rgba(210, 60, 60, 0.12);
+  --ok: #2f9e5b;
+  --warn: #c98a12;
+  --today: #e5484d;
+  --weekend: rgba(20, 30, 60, 0.035);
+  --band: rgba(20, 30, 60, 0.02);
+  --grid-line: rgba(20, 30, 60, 0.07);
+  --shadow: 0 6px 24px rgba(15, 20, 40, 0.12), 0 1px 3px rgba(15, 20, 40, 0.08);
+  --radius: 6px;
+  --font: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  --mono: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    color-scheme: dark;
+    --bg: #111317;
+    --surface: #181a20;
+    --surface-2: #1f222a;
+    --surface-3: #282c36;
+    --border: #2b2f39;
+    --border-strong: #3a3f4c;
+    --text: #e5e7ec;
+    --text-2: #a0a6b3;
+    --text-3: #6f7685;
+    --accent: #7d93ff;
+    --accent-text: #0e1120;
+    --accent-soft: rgba(125, 147, 255, 0.16);
+    --danger: #ff6b6b;
+    --danger-soft: rgba(255, 107, 107, 0.15);
+    --ok: #4cc47f;
+    --warn: #e5a83a;
+    --today: #ff6369;
+    --weekend: rgba(255, 255, 255, 0.025);
+    --band: rgba(255, 255, 255, 0.015);
+    --grid-line: rgba(255, 255, 255, 0.06);
+    --shadow: 0 8px 28px rgba(0, 0, 0, 0.5), 0 1px 3px rgba(0, 0, 0, 0.4);
+  }
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#app {
+  height: 100%;
+  margin: 0;
+}
+
+body {
+  background: var(--bg);
+  color: var(--text);
+  font: 14px/1.4 var(--font);
+  -webkit-font-smoothing: antialiased;
+}
+
+button,
+input,
+select,
+textarea {
+  font: inherit;
+  color: inherit;
+}
+
+button {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+button:hover:not(:disabled) {
+  background: var(--surface-2);
+  border-color: var(--border-strong);
+}
+
+button:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+button.primary {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--accent-text);
+}
+
+button.primary:hover:not(:disabled) {
+  background: var(--accent);
+  filter: brightness(1.08);
+}
+
+button.ghost {
+  border-color: transparent;
+  background: transparent;
+}
+
+button.ghost:hover:not(:disabled) {
+  background: var(--surface-2);
+  border-color: transparent;
+}
+
+button.icon-btn {
+  padding: 4px;
+}
+
+button.danger {
+  color: var(--danger);
+}
+
+input[type='text'],
+input[type='date'],
+input[type='number'],
+input[type='search'],
+input:not([type]),
+select,
+textarea {
+  padding: 5px 8px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+  min-width: 0;
+}
+
+input:focus,
+select:focus,
+textarea:focus,
+button:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: -1px;
+}
+
+textarea {
+  resize: vertical;
+}
+
+label.field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 12px;
+  color: var(--text-2);
+}
+
+label.field > :not(span) {
+  color: var(--text);
+  font-size: 14px;
+}
+
+.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 1px 4px 1px 8px;
+  border-radius: 999px;
+  background: var(--surface-3);
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+.chip button {
+  padding: 1px;
+  border: 0;
+  background: none;
+  color: var(--text-2);
+}
+
+.status {
+  display: inline-block;
+  padding: 1px 8px;
+  border-radius: 999px;
+  font-size: 12px;
+  background: var(--surface-3);
+  color: var(--text-2);
+}
+
+.status.doing {
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+
+.status.blocked {
+  background: var(--danger-soft);
+  color: var(--danger);
+}
+
+.status.done {
+  color: var(--ok);
+}
+
+.muted {
+  color: var(--text-2);
+}
+
+.dot {
+  display: inline-block;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  flex: none;
+}
