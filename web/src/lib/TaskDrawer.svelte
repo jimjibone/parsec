@@ -51,10 +51,28 @@
     if (id) app.addDependency(task.id, id);
   }
 
+  // Two-click delete. window.confirm() is unreliable: some embedded browsers
+  // suppress it and return false immediately.
+  let confirmDelete = $state(false);
+  let confirmTimer: ReturnType<typeof setTimeout> | undefined;
+
+  $effect(() => {
+    void task.id;
+    confirmDelete = false;
+    return () => clearTimeout(confirmTimer);
+  });
+
   async function remove() {
-    if (!confirm(`Delete task "${task.title}"?`)) return;
+    if (!confirmDelete) {
+      confirmDelete = true;
+      clearTimeout(confirmTimer);
+      confirmTimer = setTimeout(() => (confirmDelete = false), 4000);
+      return;
+    }
+    clearTimeout(confirmTimer);
+    const id = task.id;
     ui.selectedTask = null;
-    await app.deleteTask(task.id);
+    await app.deleteTask(id);
   }
 
   function onKey(e: KeyboardEvent) {
@@ -106,7 +124,15 @@
       ><Icon name="up" /></button
     >
     <button class="ghost icon-btn" title="Move down a row" onclick={() => app.saveTask(task, lane + 1)}><Icon name="down" /></button>
-    <button class="ghost icon-btn danger" title="Delete task" onclick={remove}><Icon name="trash" /></button>
+    <button
+      class="ghost danger"
+      class:icon-btn={!confirmDelete}
+      class:confirm={confirmDelete}
+      title={confirmDelete ? 'Click again to delete' : 'Delete task'}
+      onclick={remove}
+      onblur={() => (confirmDelete = false)}
+      ><Icon name="trash" />{#if confirmDelete}Delete?{/if}</button
+    >
     <button class="ghost icon-btn" title="Close" onclick={() => (ui.selectedTask = null)}><Icon name="x" /></button>
   </div>
 
@@ -372,6 +398,11 @@
     justify-content: flex-start;
     overflow: hidden;
     text-overflow: ellipsis;
+  }
+
+  .confirm {
+    padding: 3px 8px;
+    background: var(--danger-soft);
   }
 
   .bad {
