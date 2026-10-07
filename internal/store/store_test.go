@@ -87,6 +87,23 @@ func TestValidation(t *testing.T) {
 	}
 }
 
+func TestPersonColor(t *testing.T) {
+	s, _ := mustOpen(t)
+	p, err := s.CreatePerson(Person{Name: "carol", Color: "#AABBCC"})
+	if err != nil || p.Color != "#aabbcc" {
+		t.Fatalf("create: %+v %v", p, err)
+	}
+	var ve *ValidationError
+	p.Color = "red"
+	if _, err := s.UpdatePerson(p); !errors.As(err, &ve) {
+		t.Fatalf("bad colour accepted: %v", err)
+	}
+	p.Color = ""
+	if got, err := s.UpdatePerson(p); err != nil || got.Color != "" {
+		t.Fatalf("clear colour: %+v %v", got, err)
+	}
+}
+
 func TestCycleRejected(t *testing.T) {
 	s, _ := mustOpen(t)
 	p, _ := s.CreateProject(Project{Name: "P"})

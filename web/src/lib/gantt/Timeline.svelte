@@ -1,7 +1,7 @@
 <script lang="ts">
   import { flushSync, onMount } from 'svelte';
   import { app } from '../state.svelte';
-  import { ui, DAY_WIDTH, type Zoom } from '../ui.svelte';
+  import { ui, DAY_WIDTH, UNASSIGNED, type Zoom } from '../ui.svelte';
   import Icon from '../Icon.svelte';
   import { TwoClick } from '../confirm.svelte';
   import {
@@ -21,6 +21,7 @@
   } from '../dates';
   import { resizeEnd, resizeStart, shiftSpan } from '../schedule';
   import { barLayout, type BarLayout } from './barlayout';
+  import { initials } from '../people';
   import type { Project, Task } from '../types';
   import { STATUSES } from '../types';
 
@@ -547,15 +548,19 @@
     return `${t.title}\n${formatShort(t.start)} - ${formatShort(t.end)} (${st})${who ? `\n${who}` : ''}`;
   }
 
-  function initials(id: string): string {
-    const n = app.personById.get(id)?.name ?? '?';
-    return n
-      .split(/\s+/)
-      .map((w) => w[0])
-      .join('')
-      .slice(0, 2)
-      .toUpperCase();
+  const names = (ids: string[]) => ids.map((a) => app.personById.get(a)?.name ?? a).join(', ');
+
+  // ---- person highlight ----
+
+  /** Active highlight, ignoring a stale id for a person who was removed. */
+  const highlight = $derived(ui.highlight === UNASSIGNED || app.personById.has(ui.highlight) ? ui.highlight : '');
+
+  function matches(t: Task | undefined): boolean {
+    if (!highlight || !t) return true;
+    return highlight === UNASSIGNED ? t.assignees.length === 0 : t.assignees.includes(highlight);
   }
+
+  const highlightCount = $derived(highlight ? app.tasks.filter((t) => matches(t)).length : 0);
 </script>
 
 <svelte:window onpointermove={onPointerMove} onpointerup={onPointerUp} onkeydown={onKey} />
@@ -570,6 +575,20 @@
     </div>
     <button class="ghost" onclick={() => (ui.collapsed = [])}>Expand all</button>
     <button class="ghost" onclick={() => (ui.collapsed = app.projects.map((p) => p.id))}>Collapse all</button>
+    <div class="highlight" class:active={!!highlight}>
+      {#if highlight && highlight !== UNASSIGNED}
+        <span class="dot" style:background={app.colorOf(highlight)}></span>
+      {/if}
+      <select bind:value={ui.highlight} title="Fade tasks not assigned to this person">
+        <option value="">Highlight: everyone</option>
+        {#each app.people as p (p.id)}<option value={p.id}>{p.name}</option>{/each}
+        <option value={UNASSIGNED}>Unassigned</option>
+      </select>
+      {#if highlight}
+        <span class="muted hl-count">{highlightCount} task{highlightCount === 1 ? '' : 's'}</span>
+        <button class="ghost icon-btn" onclick={() => (ui.highlight = '')} aria-label="Clear highlight"><Icon name="x" size={14} /></button>
+      {/if}
+    </div>
     {#if hiddenProjects.length}
       <div class="menu-wrap">
         <button class="ghost" onclick={() => (hiddenOpen = !hiddenOpen)}><Icon name="eyeOff" /> {hiddenProjects.length} hidden</button>
@@ -749,7 +768,12 @@
               </marker>
             </defs>
             {#each arrows as a (a.key)}
-              <g class="dep" class:bad={a.bad} class:armed={confirmArrow.is(a.key)}>
+              <g
+                class="dep"
+                class:bad={a.bad}
+                class:armed={confirmArrow.is(a.key)}
+                class:faded={!matches(app.taskById.get(a.from)) && !matches(app.taskById.get(a.to))}
+              >
                 <path class="hit" d={a.d} onclick={() => removeArrow(a)} role="presentation">
                   <title
                     >{app.taskById.get(a.from)?.title} must finish before {app.taskById.get(a.to)?.title} starts{a.bad
@@ -771,8 +795,12 @@
           {#snippet pills(t: Task, lay: BarLayout)}
             {#if lay.shown || lay.more}
               <span class="who"
-                >{#each t.assignees.slice(0, lay.shown) as a (a)}<span class="av">{initials(a)}</span>{/each}{#if lay.more}<span
-                    class="av more">{lay.shown ? '+' : ''}{lay.more}</span
+                >{#each t.assignees.slice(0, lay.shown) as a (a)}<span
+                    class="av"
+                    class:hl={highlight === a}
+                    style:background={app.colorOf(a)}>{initials(app.personById.get(a)?.name)}</span
+                  >{/each}{#if lay.more}<span class="av more" title={names(t.assignees.slice(lay.shown))}
+                    >{lay.shown ? '+' : ''}{lay.more}</span
                   >{/if}</span
               >
             {/if}
@@ -789,6 +817,7 @@
                 class:selected={ui.selectedTask === t.id}
                 class:dragging={drag?.id === t.id && drag.moved}
                 class:link-target={link?.over === t.id}
+                class:faded={!matches(t)}
                 data-task-id={t.id}
                 style:left="{g.x}px"
                 style:top="{g.y}px"
@@ -827,6 +856,7 @@
               {#if !lay.titleInside && room >= 30}
                 <span
                   class="outside-label"
+                  class:faded={!matches(t)}
                   style:left="{g.x + g.w + 18}px"
                   style:top="{g.y}px"
                   style:height="{BAR_H}px"
@@ -1346,7 +1376,18 @@
     font-weight: 700;
     line-height: 12px;
     text-align: center;
+    color: #fff;
+    /* Person pills set their own background inline; this is for "+N". */
     background: rgba(0, 0, 0, 0.22);
+    box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.45);
+  }
+
+  .av.hl {
+    box-shadow: 0 0 0 2px #fff;
+  }
+
+  .av.more {
+    box-shadow: none;
   }
 
   .outside-label {
@@ -1362,8 +1403,38 @@
   }
 
   .outside-label .av {
+    box-shadow: none;
+  }
+
+  .outside-label .av.more {
     background: var(--surface-3);
     color: var(--text);
+  }
+
+  /* Person highlight: everything not matching fades back. */
+  .bar.faded,
+  .outside-label.faded {
+    opacity: 0.18;
+    filter: grayscale(0.7);
+  }
+
+  .dep.faded {
+    opacity: 0.2;
+  }
+
+  .highlight {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+
+  .highlight.active select {
+    border-color: var(--accent);
+  }
+
+  .hl-count {
+    font-size: 12px;
+    white-space: nowrap;
   }
 
   .ot {

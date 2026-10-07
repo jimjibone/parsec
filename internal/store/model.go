@@ -36,10 +36,12 @@ type Task struct {
 	Created       string   `yaml:"created,omitempty" json:"created"`
 }
 
-// Person can be assigned to tasks.
+// Person can be assigned to tasks. Color is optional (#rrggbb); clients
+// derive a stable default from the ID when it is empty.
 type Person struct {
-	ID   string `yaml:"id" json:"id"`
-	Name string `yaml:"name" json:"name"`
+	ID    string `yaml:"id" json:"id"`
+	Name  string `yaml:"name" json:"name"`
+	Color string `yaml:"color,omitempty" json:"color"`
 }
 
 // Snapshot is the full database contents.

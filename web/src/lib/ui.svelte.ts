@@ -13,7 +13,11 @@ interface Persisted {
   collapsed: string[];
   hidden: string[];
   trackerProject: string;
+  highlight: string;
 }
+
+/** Timeline highlight value meaning "tasks with no assignee". */
+export const UNASSIGNED = '__none';
 
 function loadPrefs(): Partial<Persisted> {
   try {
@@ -29,6 +33,7 @@ class UiState {
   collapsed = $state<string[]>([]);
   hidden = $state<string[]>([]);
   trackerProject = $state(''); // '' = all projects
+  highlight = $state(''); // timeline: '' = everyone, UNASSIGNED, or a person id
   selectedTask = $state<string | null>(null);
   gitOpen = $state(false);
 
@@ -39,6 +44,7 @@ class UiState {
     if (Array.isArray(p.collapsed)) this.collapsed = p.collapsed;
     if (Array.isArray(p.hidden)) this.hidden = p.hidden;
     if (typeof p.trackerProject === 'string') this.trackerProject = p.trackerProject;
+    if (typeof p.highlight === 'string') this.highlight = p.highlight;
   }
 
   persist() {
@@ -48,6 +54,7 @@ class UiState {
       collapsed: this.collapsed,
       hidden: this.hidden,
       trackerProject: this.trackerProject,
+      highlight: this.highlight,
     };
     try {
       localStorage.setItem(KEY, JSON.stringify(p));

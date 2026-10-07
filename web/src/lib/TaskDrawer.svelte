@@ -210,6 +210,7 @@
     <div class="chips">
       {#each task.assignees as a (a)}
         <span class="chip">
+          <span class="dot person-dot" style:background={app.colorOf(a)}></span>
           {app.personById.get(a)?.name ?? a}
           <button onclick={() => save({ assignees: task.assignees.filter((x) => x !== a) })} aria-label="Unassign"
             ><Icon name="x" size={12} /></button
@@ -419,6 +420,12 @@
     justify-content: flex-start;
     overflow: hidden;
     text-overflow: ellipsis;
+  }
+
+  .person-dot {
+    width: 8px;
+    height: 8px;
+    margin-left: -2px;
   }
 
   .switch {

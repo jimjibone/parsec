@@ -5,7 +5,7 @@
   import ProjectEditor from './ProjectEditor.svelte';
   import { TwoClick } from '../confirm.svelte';
   import { formatShort, toDay, toISO, today } from '../dates';
-  import { STATUSES, type Task } from '../types';
+  import { STATUSES, type Person, type Task } from '../types';
 
   type SortKey = 'title' | 'project' | 'status' | 'start' | 'end' | 'estimate' | 'created';
 
@@ -105,6 +105,10 @@
 
   const confirmRemove = new TwoClick();
 
+  function setPersonColor(p: Person, color: string) {
+    app.savePerson({ ...p, color });
+  }
+
   async function deletePerson(id: string) {
     if (!confirmRemove.hit(id)) return;
     if (assigneeFilter === id) assigneeFilter = '';
@@ -171,6 +175,9 @@
             onblur={(e) => renamePerson(p.id, e.currentTarget.value)}
           />
         {:else}
+          <label class="swatch" style:background={app.colorOf(p.id)} title="Change colour">
+            <input type="color" value={app.colorOf(p.id)} onchange={(e) => setPersonColor(p, e.currentTarget.value)} />
+          </label>
           <button
             class="ghost pname"
             ondblclick={() => (renamingPerson = p.id)}
@@ -276,7 +283,9 @@
                   </select>
                 </td>
                 <td>
-                  {#each t.assignees as a (a)}<span class="chip plain">{app.personById.get(a)?.name ?? a}</span>{/each}
+                  {#each t.assignees as a (a)}<span class="chip plain"
+                      ><span class="dot" style:background={app.colorOf(a)}></span>{app.personById.get(a)?.name ?? a}</span
+                    >{/each}
                 </td>
                 <td class="date">{formatShort(t.start)}</td>
                 <td class="date" class:overdue={overdue(t)}>{formatShort(t.end)}</td>
@@ -371,6 +380,28 @@
   .person {
     display: flex;
     align-items: center;
+  }
+
+  .swatch {
+    position: relative;
+    width: 12px;
+    height: 12px;
+    margin: 0 2px 0 8px;
+    border-radius: 50%;
+    flex: none;
+    cursor: pointer;
+  }
+
+  .swatch input {
+    position: absolute;
+    inset: 0;
+    opacity: 0;
+    cursor: pointer;
+  }
+
+  .chip.plain .dot {
+    width: 8px;
+    height: 8px;
   }
 
   .pname {

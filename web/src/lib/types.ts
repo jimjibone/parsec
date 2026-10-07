@@ -42,6 +42,8 @@ export interface Task {
 export interface Person {
   id: string;
   name: string;
+  /** '#rrggbb', or '' to use the default derived from the id. */
+  color: string;
 }
 
 export interface Snapshot {

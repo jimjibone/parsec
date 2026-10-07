@@ -36,7 +36,7 @@ export const api = {
   updateTasks: (ts: Task[]) => req<Task[]>('PUT', '/api/tasks', ts),
   deleteTask: (id: string) => req<Changed>('DELETE', `/api/tasks/${id}`),
 
-  createPerson: (name: string) => req<Person>('POST', '/api/people', { name }),
+  createPerson: (name: string, color: string) => req<Person>('POST', '/api/people', { name, color }),
   updatePerson: (p: Person) => req<Person>('PUT', `/api/people/${p.id}`, p),
   deletePerson: (id: string) => req<Changed>('DELETE', `/api/people/${id}`),
 

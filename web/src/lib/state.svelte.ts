@@ -2,6 +2,7 @@ import { api, ApiError } from './api';
 import { place, resolve, type Slot } from './lanes';
 import { toDay, toISO, today } from './dates';
 import { addWorkDays, snapWorkday } from './schedule';
+import { assignColors, nextPersonColor, UNKNOWN_PERSON_COLOR } from './people';
 import { PROJECT_COLORS, type GitStatus, type Person, type Project, type Task } from './types';
 
 export interface Toast {
@@ -22,6 +23,11 @@ class AppState {
   taskById = $derived(new Map(this.tasks.map((t) => [t.id, t])));
   projectById = $derived(new Map(this.projects.map((p) => [p.id, p])));
   personById = $derived(new Map(this.people.map((p) => [p.id, p])));
+  private personColors = $derived(assignColors(this.people));
+
+  colorOf(personId: string): string {
+    return this.personColors.get(personId) ?? UNKNOWN_PERSON_COLOR;
+  }
 
   /** Conflict-free lane per task, computed from stored lanes. */
   displayLane = $derived.by(() => {
@@ -208,7 +214,7 @@ class AppState {
   }
 
   async createPerson(name: string): Promise<Person | undefined> {
-    const p = await this.run(() => api.createPerson(name));
+    const p = await this.run(() => api.createPerson(name, nextPersonColor(this.people)));
     if (p) this.people = [...this.people, p];
     return p;
   }

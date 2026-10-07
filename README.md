@@ -23,6 +23,11 @@ come from git.
 - Milestones per project, shown as diamonds with a marker line.
 - Continuous horizontal scroll (the range grows as you scroll), day/week/month
   zoom, a Today button, and click-drag panning on empty space.
+- Assignee initials on bars, in each person's colour (set in the people list;
+  new people get the least-used palette colour). Short bars fall back to
+  "first one or two + N" or a bare count.
+- Highlight a person (or "Unassigned") on the timeline to fade every other
+  task.
 - Task panel: title, status, project, dates, estimate (hours), assignees,
   dependencies, description.
 - Projects & tasks view: sortable, filterable task table, project editor

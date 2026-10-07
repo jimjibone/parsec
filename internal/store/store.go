@@ -12,6 +12,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"regexp"
 	"slices"
 	"sort"
 	"strings"
@@ -432,12 +433,25 @@ func (s *Store) validateTasks(ts []*Task) error {
 
 // ---- people ----
 
+var hexColor = regexp.MustCompile(`^#[0-9a-fA-F]{6}$`)
+
+func validatePerson(p *Person) error {
+	p.Name = strings.TrimSpace(p.Name)
+	if p.Name == "" {
+		return invalid("person name is required")
+	}
+	p.Color = strings.ToLower(strings.TrimSpace(p.Color))
+	if p.Color != "" && !hexColor.MatchString(p.Color) {
+		return invalid("person colour must be #rrggbb, got %q", p.Color)
+	}
+	return nil
+}
+
 func (s *Store) CreatePerson(p Person) (Person, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	p.Name = strings.TrimSpace(p.Name)
-	if p.Name == "" {
-		return Person{}, invalid("person name is required")
+	if err := validatePerson(&p); err != nil {
+		return Person{}, err
 	}
 	p.ID = s.newID()
 	people := append(slices.Clone(s.people), p)
@@ -451,9 +465,8 @@ func (s *Store) CreatePerson(p Person) (Person, error) {
 func (s *Store) UpdatePerson(p Person) (Person, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	p.Name = strings.TrimSpace(p.Name)
-	if p.Name == "" {
-		return Person{}, invalid("person name is required")
+	if err := validatePerson(&p); err != nil {
+		return Person{}, err
 	}
 	i := slices.IndexFunc(s.people, func(x Person) bool { return x.ID == p.ID })
 	if i < 0 {
