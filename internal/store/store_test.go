@@ -40,7 +40,7 @@ func TestRoundTrip(t *testing.T) {
 		t.Fatal(err)
 	}
 	a := mkTask(t, s, p.ID, "first")
-	b, err := s.CreateTask(Task{ProjectID: p.ID, Title: "second", Start: "2026-01-08", End: "2026-01-09", DependsOn: []string{a.ID}, Assignees: []string{person.ID}, Lane: 1})
+	b, err := s.CreateTask(Task{ProjectID: p.ID, Title: "second", Start: "2026-01-08", End: "2026-01-09", DependsOn: []string{a.ID}, Assignees: []string{person.ID}, Lane: 1, WeekendWork: true})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -61,7 +61,7 @@ func TestRoundTrip(t *testing.T) {
 		t.Fatalf("snapshot = %+v", snap)
 	}
 	for _, tk := range snap.Tasks {
-		if tk.ID == b.ID && (tk.Lane != 1 || tk.DependsOn[0] != a.ID || tk.Assignees[0] != person.ID || tk.ProjectID != p.ID) {
+		if tk.ID == b.ID && (tk.Lane != 1 || !tk.WeekendWork || tk.DependsOn[0] != a.ID || tk.Assignees[0] != person.ID || tk.ProjectID != p.ID) {
 			t.Fatalf("reloaded task = %+v", tk)
 		}
 	}

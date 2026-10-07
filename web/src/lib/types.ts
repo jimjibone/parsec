@@ -30,6 +30,8 @@ export interface Task {
   status: Status;
   start: string;
   end: string;
+  /** When false, weekends are non-working days for this task. */
+  weekendWork: boolean;
   estimateHours: number;
   assignees: string[];
   dependsOn: string[];

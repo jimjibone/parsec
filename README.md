@@ -16,6 +16,10 @@ come from git.
 - Dependencies drawn as arrows (red when the predecessor ends on or after the
   successor starts). Drag the dot on a bar's right edge onto another bar to add
   one; click an arrow to remove it. Cycles are rejected.
+- Weekends are non-working days by default: durations count working days,
+  moving a task keeps its working-day length, start/end dates skip weekends,
+  and weekend days inside a bar are faded. Tick "Works weekends" on a task to
+  treat every day as a working day.
 - Milestones per project, shown as diamonds with a marker line.
 - Continuous horizontal scroll (the range grows as you scroll), day/week/month
   zoom, a Today button, and click-drag panning on empty space.

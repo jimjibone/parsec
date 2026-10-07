@@ -19,6 +19,7 @@
     weekdayLetter,
     year,
   } from '../dates';
+  import { resizeEnd, resizeStart, shiftSpan } from '../schedule';
   import type { Project, Task } from '../types';
   import { STATUSES } from '../types';
 
@@ -89,6 +90,7 @@
     e: number;
     dy: number;
     moved: boolean;
+    ww: boolean; // task works weekends
   }
   let drag = $state<Drag | null>(null);
 
@@ -353,6 +355,7 @@
       e: g.e,
       dy: 0,
       moved: false,
+      ww: t.weekendWork,
     };
   }
 
@@ -383,15 +386,15 @@
       if (!drag.moved && Math.hypot(dx, dy) < 4) return;
       drag.moved = true;
       const dd = Math.round(dx / dw);
-      if (drag.kind === 'move') {
-        drag.s = drag.s0 + dd;
-        drag.e = drag.e0 + dd;
-        drag.dy = dy;
-      } else if (drag.kind === 'start') {
-        drag.s = Math.min(drag.s0 + dd, drag.e0);
-      } else {
-        drag.e = Math.max(drag.e0 + dd, drag.s0);
-      }
+      const span =
+        drag.kind === 'move'
+          ? shiftSpan(drag.s0, drag.e0, dd, drag.ww)
+          : drag.kind === 'start'
+            ? resizeStart(drag.s0, drag.e0, dd, drag.ww)
+            : resizeEnd(drag.s0, drag.e0, dd, drag.ww);
+      drag.s = span.s;
+      drag.e = span.e;
+      if (drag.kind === 'move') drag.dy = dy;
       autoScroll(ev);
     } else if (link) {
       const p = canvasPoint(ev);
@@ -495,7 +498,8 @@
     } else if (ev.key === 'ArrowLeft' || ev.key === 'ArrowRight') {
       ev.preventDefault();
       const d = ev.key === 'ArrowLeft' ? -1 : 1;
-      app.saveTask({ ...t, start: toISO(toDay(t.start) + d), end: toISO(toDay(t.end) + d) });
+      const span = shiftSpan(toDay(t.start), toDay(t.end), d, t.weekendWork);
+      app.saveTask({ ...t, start: toISO(span.s), end: toISO(span.e) });
     }
   }
 
@@ -784,6 +788,15 @@
                 role="button"
                 tabindex="-1"
               >
+                {#if !t.weekendWork}
+                  <!-- Repeating 7-day pattern; first band starts on the first Saturday in the bar. -->
+                  <div
+                    class="weekend-off"
+                    style:background-size="{7 * dw}px 100%"
+                    style:background-position-x="{((5 - weekday(g.s) + 7) % 7) * dw}px"
+                    style:--wk="{2 * dw}px"
+                  ></div>
+                {/if}
                 <div class="handle l" onpointerdown={(e) => startDrag(e, t, 'start')} role="presentation"></div>
                 {#if !outside}
                   <span class="label">{t.title}</span>
@@ -1277,6 +1290,21 @@
   .bar.link-target {
     outline: 2px dashed var(--accent);
     outline-offset: 2px;
+  }
+
+  /* Fades weekend days inside a bar; label and avatars sit above it. */
+  .weekend-off {
+    position: absolute;
+    inset: 0;
+    border-radius: inherit;
+    pointer-events: none;
+    background-image: linear-gradient(90deg, color-mix(in srgb, var(--surface) 55%, transparent) 0 var(--wk), transparent var(--wk));
+    background-repeat: repeat-x;
+  }
+
+  .label,
+  .who {
+    position: relative;
   }
 
   .label {

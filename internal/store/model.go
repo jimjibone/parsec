@@ -18,7 +18,8 @@ type Project struct {
 }
 
 // Task is a unit of work with a date range on the timeline.
-// Start and End are inclusive calendar dates (YYYY-MM-DD).
+// Start and End are inclusive calendar dates (YYYY-MM-DD). Unless
+// WeekendWork is set, weekends inside the range are not working days.
 type Task struct {
 	ID            string   `yaml:"-" json:"id"`
 	ProjectID     string   `yaml:"-" json:"projectId"`
@@ -27,6 +28,7 @@ type Task struct {
 	Status        string   `yaml:"status" json:"status"`
 	Start         string   `yaml:"start" json:"start"`
 	End           string   `yaml:"end" json:"end"`
+	WeekendWork   bool     `yaml:"weekendWork,omitempty" json:"weekendWork"`
 	EstimateHours float64  `yaml:"estimateHours,omitempty" json:"estimateHours"`
 	Assignees     []string `yaml:"assignees,omitempty" json:"assignees"`
 	DependsOn     []string `yaml:"dependsOn,omitempty" json:"dependsOn"`

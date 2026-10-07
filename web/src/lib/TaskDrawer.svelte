@@ -3,6 +3,7 @@
   import { ui } from './ui.svelte';
   import Icon from './Icon.svelte';
   import { spanDays, toDay, toISO } from './dates';
+  import { normalizeSpan, shiftSpan, workDays, type Span } from './schedule';
   import { STATUSES, type Task } from './types';
 
   let { taskId }: { taskId: string } = $props();
@@ -18,18 +19,29 @@
     app.saveTask({ ...task, ...patch });
   }
 
+  function saveSpan(span: Span, patch: Partial<Task> = {}) {
+    save({ ...patch, start: toISO(span.s), end: toISO(span.e) });
+  }
+
   function setStart(v: string) {
     if (!v) return;
-    // Keep duration when moving the start.
-    const len = toDay(task.end) - toDay(task.start);
-    save({ start: v, end: toISO(toDay(v) + len) });
+    // Keep the (working-day) duration when moving the start.
+    const s = toDay(task.start);
+    saveSpan(shiftSpan(s, toDay(task.end), toDay(v) - s, task.weekendWork));
   }
 
   function setEnd(v: string) {
     if (!v) return;
-    if (toDay(v) < toDay(task.start)) save({ start: v, end: v });
-    else save({ end: v });
+    const e = toDay(v);
+    const s = Math.min(toDay(task.start), e);
+    saveSpan(normalizeSpan(s, e, task.weekendWork));
   }
+
+  function setWeekendWork(on: boolean) {
+    saveSpan(normalizeSpan(toDay(task.start), toDay(task.end), on), { weekendWork: on });
+  }
+
+  const duration = $derived(workDays(toDay(task.start), toDay(task.end), task.weekendWork));
 
   function addAssignee(id: string) {
     if (id === '__new') {
@@ -180,8 +192,17 @@
     </label>
     <div class="field">
       <span>Duration</span>
-      <div class="static">{spanDays(task.start, task.end)} day{spanDays(task.start, task.end) === 1 ? '' : 's'}</div>
+      <div class="static">
+        {duration}{task.weekendWork ? '' : ' working'} day{duration === 1 ? '' : 's'}
+        {#if !task.weekendWork && spanDays(task.start, task.end) !== duration}
+          <span class="muted cal">({spanDays(task.start, task.end)} calendar)</span>
+        {/if}
+      </div>
     </div>
+    <label class="switch">
+      <input type="checkbox" checked={task.weekendWork} onchange={(e) => setWeekendWork(e.currentTarget.checked)} />
+      <span>Works weekends</span>
+    </label>
   </div>
 
   <div class="field">
@@ -398,6 +419,19 @@
     justify-content: flex-start;
     overflow: hidden;
     text-overflow: ellipsis;
+  }
+
+  .switch {
+    grid-column: 1 / -1;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 14px;
+    cursor: pointer;
+  }
+
+  .cal {
+    font-size: 12px;
   }
 
   .confirm {

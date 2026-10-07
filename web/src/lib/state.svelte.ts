@@ -1,6 +1,7 @@
 import { api, ApiError } from './api';
 import { place, resolve, type Slot } from './lanes';
 import { toDay, toISO, today } from './dates';
+import { addWorkDays, snapWorkday } from './schedule';
 import { PROJECT_COLORS, type GitStatus, type Person, type Project, type Task } from './types';
 
 export interface Toast {
@@ -140,16 +141,22 @@ class AppState {
   }
 
   async createTask(projectId: string, init: Partial<Task> = {}): Promise<Task | undefined> {
-    const s = init.start ?? toISO(today());
+    const weekendWork = init.weekendWork ?? false;
+    // The requested calendar length becomes a length in working days.
+    const s0 = toDay(init.start ?? toISO(today()));
+    const len = init.end ? toDay(init.end) - s0 + 1 : 3;
+    const s = weekendWork ? s0 : snapWorkday(s0, 1);
+    const e = weekendWork ? s + len - 1 : addWorkDays(s, len);
     const t: Partial<Task> = {
       title: 'New task',
       status: 'todo',
-      start: s,
-      end: init.end ?? toISO(toDay(s) + 2),
       assignees: [],
       dependsOn: [],
       lane: 0,
       ...init,
+      start: toISO(s),
+      end: toISO(e),
+      weekendWork,
       projectId,
     };
     const base = this.tasks
