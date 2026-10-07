@@ -1,10 +1,19 @@
-# parsec
+<p align="center">
+  <img src="web/public/favicon.svg" width="72" height="72" alt="parsec logo">
+</p>
+
+<h1 align="center">parsec</h1>
 
 Project task planning and timing, with a gantt timeline. Named after the unit of
 time used to make the Kessel Run.
 
 Data lives in a plain git repository as YAML files, so history, sync and backup
 come from git.
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/screenshot-dark.png">
+  <img src="docs/screenshot-light.png" alt="parsec timeline: three projects (Millennium Falcon refit, Deflector shields, Trench run) with tasks, dependency arrows, milestones and assignee initials">
+</picture>
 
 ## Features
 
