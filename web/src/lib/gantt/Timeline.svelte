@@ -22,7 +22,7 @@
   import { resizeEnd, resizeStart, shiftSpan } from '../schedule';
   import { barLayout, type BarLayout } from './barlayout';
   import { initials } from '../people';
-  import type { Project, Task } from '../types';
+  import type { Milestone, Project, Task } from '../types';
   import { STATUSES } from '../types';
 
   const SIDEBAR_W = 260;
@@ -112,6 +112,20 @@
     moved: boolean;
   }
   let pan: Pan | null = null;
+
+  interface MsDrag {
+    project: string;
+    id: string;
+    px: number;
+    sx0: number;
+    d0: number;
+    d: number;
+    moved: boolean;
+  }
+  let msDrag = $state<MsDrag | null>(null);
+
+  /** Milestone whose editor popover is open. */
+  let msEdit = $state<{ project: string; id: string } | null>(null);
 
   // ---- task geometry (canvas coordinates) ----
 
@@ -369,8 +383,16 @@
     link = { from: t.id, x: p.x, y: p.y, over: null };
   }
 
+  function startMsDrag(ev: PointerEvent, p: Project, m: Milestone) {
+    if (ev.button !== 0) return;
+    ev.stopPropagation();
+    ev.preventDefault();
+    const d = toDay(m.date);
+    msDrag = { project: p.id, id: m.id, px: ev.clientX, sx0: scroller.scrollLeft, d0: d, d, moved: false };
+  }
+
   function startPan(ev: PointerEvent) {
-    if (ev.button !== 0 || (ev.target as Element).closest('[data-task-id], .milestone, .dep')) return;
+    if (ev.button !== 0 || (ev.target as Element).closest('[data-task-id], .milestone, .ms-pop, .dep')) return;
     pan = { px: ev.clientX, py: ev.clientY, sl: scroller.scrollLeft, st: scroller.scrollTop, moved: false };
   }
 
@@ -397,6 +419,12 @@
       drag.s = span.s;
       drag.e = span.e;
       if (drag.kind === 'move') drag.dy = dy;
+      autoScroll(ev);
+    } else if (msDrag) {
+      const dx = ev.clientX - msDrag.px + (scroller.scrollLeft - msDrag.sx0);
+      if (!msDrag.moved && Math.abs(dx) < 4) return;
+      msDrag.moved = true;
+      msDrag.d = msDrag.d0 + Math.round(dx / dw);
       autoScroll(ev);
     } else if (link) {
       const p = canvasPoint(ev);
@@ -434,6 +462,16 @@
       }
       const next = { ...t, start: toISO(d.s), end: toISO(d.e) };
       if (next.start !== t.start || next.end !== t.end || target !== undefined) app.saveTask(next, target);
+    } else if (msDrag) {
+      const d = msDrag;
+      msDrag = null;
+      const m = app.projectById.get(d.project)?.milestones.find((x) => x.id === d.id);
+      if (!m) return;
+      if (!d.moved) {
+        msEdit = msEdit?.id === m.id ? null : { project: d.project, id: m.id };
+        return;
+      }
+      if (d.d !== d.d0) app.saveMilestone(d.project, { ...m, date: toISO(d.d) });
     } else if (link) {
       const l = link;
       link = null;
@@ -443,6 +481,7 @@
       pan = null;
       if (!p.moved) {
         ui.selectedTask = null;
+        msEdit = null;
         confirmArrow.reset();
       }
     }
@@ -462,12 +501,18 @@
   }
 
   async function onCanvasDblClick(ev: MouseEvent) {
-    if ((ev.target as Element).closest('[data-task-id], .milestone')) return;
+    if ((ev.target as Element).closest('[data-task-id], .milestone, .ms-pop')) return;
     const { x, y } = canvasPoint(ev);
     const row = layout.rows.find((r) => y >= r.top && y < r.top + r.height);
-    if (!row || row.collapsed || y < row.top + PROJ_H) return;
-    const lane = Math.floor((y - row.top - PROJ_H) / LANE_H);
+    if (!row) return;
     const day = rangeStart + Math.floor(x / dw);
+    // The project header strip holds milestones; the lanes below hold tasks.
+    if (y < row.top + PROJ_H) {
+      addMilestoneTo(row.project, day);
+      return;
+    }
+    if (row.collapsed) return;
+    const lane = Math.floor((y - row.top - PROJ_H) / LANE_H);
     const len = ui.zoom === 'day' ? 3 : ui.zoom === 'week' ? 7 : 14;
     const t = await app.createTask(row.project.id, { start: toISO(day), end: toISO(day + len - 1), lane });
     if (t) ui.selectedTask = t.id;
@@ -489,12 +534,46 @@
     if (t) ui.selectedTask = t.id;
   }
 
+  // ---- milestones ----
+
+  async function addMilestoneTo(p: Project, day = Math.round(centerDay())) {
+    const m = await app.addMilestone(p.id, 'Milestone', toISO(day));
+    if (m) msEdit = { project: p.id, id: m.id };
+  }
+
+  const msEditing = $derived.by(() => {
+    if (!msEdit) return null;
+    const p = app.projectById.get(msEdit.project);
+    const m = p?.milestones.find((x) => x.id === msEdit!.id);
+    const row = p && layout.byProject.get(p.id);
+    return p && m && row ? { p, m, row } : null;
+  });
+
+  const confirmMs = new TwoClick();
+
+  function deleteMilestone(p: Project, m: Milestone) {
+    if (!confirmMs.hit(m.id)) return;
+    msEdit = null;
+    app.deleteMilestone(p.id, m.id);
+  }
+
+  function renameMilestone(p: Project, m: Milestone, name: string) {
+    name = name.trim();
+    if (name && name !== m.name) app.saveMilestone(p.id, { ...m, name });
+  }
+
   function onKey(ev: KeyboardEvent) {
     const target = ev.target as HTMLElement;
+    if (ev.key === 'Escape' && msEdit && target.closest('.ms-pop')) {
+      msEdit = null;
+      return;
+    }
     if (target.closest('input, textarea, select, [contenteditable]')) return;
     if (ev.key === 'Escape') {
       drag = null;
       link = null;
+      msDrag = null;
+      msEdit = null;
       return;
     }
     const t = ui.selectedTask ? app.taskById.get(ui.selectedTask) : undefined;
@@ -574,7 +653,7 @@
 
 <svelte:window onpointermove={onPointerMove} onpointerup={onPointerUp} onkeydown={onKey} />
 
-<div class="timeline" class:dragging={drag?.moved || link}>
+<div class="timeline" class:dragging={drag?.moved || msDrag?.moved || link}>
   <div class="toolbar">
     <button onclick={() => scrollToDay(now, 0.3, true)}><Icon name="today" /> Today</button>
     <div class="seg">
@@ -627,7 +706,8 @@
     {/if}
     <div class="spacer"></div>
     <span class="hint muted"
-      >Double-click a lane to add a task. Drag the dot on a bar's right edge to link. Alt+arrows move the selected task.</span
+      >Double-click a lane to add a task, or a project's top strip to add a milestone. Drag the dot on a bar's right edge to link.
+      Alt+arrows move the selected task.</span
     >
   </div>
 
@@ -714,6 +794,9 @@
                     title="Move project down"><Icon name="down" size={14} /></button
                   >
                   <button class="ghost icon-btn" onclick={() => addTaskTo(p)} title="Add task"><Icon name="plus" /></button>
+                  <button class="ghost icon-btn" onclick={() => addMilestoneTo(p)} title="Add milestone"
+                    ><Icon name="diamond" size={14} /></button
+                  >
                   <button class="ghost icon-btn" onclick={() => ui.setHidden(p.id, true)} title="Hide project"
                     ><Icon name="eyeOff" /></button
                   >
@@ -757,20 +840,75 @@
               {/if}
             {/if}
             {#each p.milestones as m (m.id)}
-              {@const mx = (toDay(m.date) - rangeStart) * dw + dw / 2}
+              {@const md = msDrag?.id === m.id ? msDrag.d : toDay(m.date)}
+              {@const mx = (md - rangeStart) * dw + dw / 2}
               <div class="ms-line" style:left="{mx}px" style:top="{r.top}px" style:height="{r.height}px" style:--c={p.color}></div>
               <div
                 class="milestone"
+                class:dragging={msDrag?.id === m.id && msDrag.moved}
+                class:selected={msEdit?.id === m.id}
                 style:left="{mx}px"
                 style:top="{r.top + PROJ_H / 2}px"
                 style:--c={p.color}
-                title="{m.name}: {formatLong(toDay(m.date))}"
+                title="{m.name}: {formatLong(md)}{msDrag?.id === m.id ? '' : '\nDrag to move, click to edit.'}"
+                onpointerdown={(e) => startMsDrag(e, p, m)}
+                role="button"
+                tabindex="-1"
               >
                 <span class="diamond"></span>
                 <span class="ms-label">{m.name}</span>
+                {#if msDrag?.id === m.id && msDrag.moved}
+                  <span class="ms-date">{formatShort(toISO(md))}</span>
+                {/if}
               </div>
             {/each}
           {/each}
+
+          {#if msEditing}
+            {@const { p, m, row } = msEditing}
+            <!-- svelte-ignore a11y_no_static_element_interactions -->
+            <div
+              class="ms-pop"
+              style:left="{(toDay(m.date) - rangeStart) * dw + dw / 2}px"
+              style:top="{row.top + PROJ_H - 4}px"
+              style:--c={p.color}
+              onpointerdown={(e) => e.stopPropagation()}
+            >
+              {#key m.id}
+                <input
+                  type="text"
+                  value={m.name}
+                  aria-label="Milestone name"
+                  use:focusSelect
+                  onkeydown={(e) => {
+                    if (e.key === 'Enter') {
+                      renameMilestone(p, m, e.currentTarget.value);
+                      msEdit = null;
+                    }
+                    // Revert first so a blur on close doesn't save the edit.
+                    if (e.key === 'Escape') e.currentTarget.value = m.name;
+                  }}
+                  onblur={(e) => renameMilestone(p, m, e.currentTarget.value)}
+                />
+              {/key}
+              <input
+                type="date"
+                value={m.date}
+                aria-label="Milestone date"
+                onchange={(e) => {
+                  const v = e.currentTarget.value;
+                  if (v) app.saveMilestone(p.id, { ...m, date: v });
+                }}
+              />
+              <button
+                class="ghost icon-btn"
+                class:danger={confirmMs.is(m.id)}
+                onclick={() => deleteMilestone(p, m)}
+                title={confirmMs.is(m.id) ? 'Click again to delete' : 'Delete milestone'}><Icon name="trash" size={14} /></button
+              >
+              <button class="ghost icon-btn" onclick={() => (msEdit = null)} aria-label="Close"><Icon name="x" size={14} /></button>
+            </div>
+          {/if}
 
           {#if now >= rangeStart && now < rangeStart + rangeDays}
             <div class="today-line" style:left="{(now - rangeStart) * dw + dw / 2}px"></div>
@@ -1236,7 +1374,49 @@
     gap: 6px;
     transform: translate(-7px, -50%);
     z-index: 2;
+    cursor: grab;
+    touch-action: none;
+  }
+
+  .milestone.dragging {
+    z-index: 6;
+    cursor: grabbing;
+  }
+
+  .milestone.selected .diamond,
+  .milestone:hover .diamond {
+    box-shadow: 0 0 0 2px var(--c);
+  }
+
+  .ms-date {
+    font-size: 11px;
+    color: var(--text-2);
+    white-space: nowrap;
+  }
+
+  .ms-pop {
+    position: absolute;
+    z-index: 7;
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    padding: 6px;
+    transform: translateX(-12px);
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-top: 2px solid var(--c);
+    border-radius: 8px;
+    box-shadow: var(--shadow);
     cursor: default;
+    user-select: text;
+  }
+
+  .ms-pop input[type='text'] {
+    width: 160px;
+  }
+
+  .ms-pop .danger {
+    color: var(--danger);
   }
 
   .diamond {
