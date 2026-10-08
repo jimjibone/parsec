@@ -51,6 +51,10 @@ func (h *hub) unsubscribe(c chan Event) {
 	h.mu.Unlock()
 }
 
+// pingEvery keeps proxies from closing idle streams; the web UI treats a
+// stream silent for more than twice this as dead.
+const pingEvery = 25 * time.Second
+
 // serveEvents streams events as server-sent events.
 func (h *hub) serveEvents(w http.ResponseWriter, r *http.Request) {
 	rc := http.NewResponseController(w)
@@ -65,14 +69,16 @@ func (h *hub) serveEvents(w http.ResponseWriter, r *http.Request) {
 
 	c := h.subscribe()
 	defer h.unsubscribe(c)
-	ping := time.NewTicker(25 * time.Second)
+	ping := time.NewTicker(pingEvery)
 	defer ping.Stop()
 	for {
 		select {
 		case <-r.Context().Done():
 			return
 		case <-ping.C:
-			fmt.Fprint(w, ": ping\n\n")
+			// A named event, not a comment, so clients can see it and
+			// notice a connection that died silently.
+			fmt.Fprint(w, "event: ping\ndata: {}\n\n")
 		case e := <-c:
 			b, _ := json.Marshal(e)
 			fmt.Fprintf(w, "data: %s\n\n", b)

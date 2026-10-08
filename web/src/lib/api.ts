@@ -20,17 +20,33 @@ export function setUnauthorizedHandler(fn: () => void) {
   onUnauthorized = fn;
 }
 
+/** Called when a request cannot reach the server (or the proxy says the
+ * server is down). */
+let onNetworkError = () => {};
+export function setNetworkErrorHandler(fn: () => void) {
+  onNetworkError = fn;
+}
+
 async function req<T>(method: string, path: string, body?: unknown): Promise<T> {
   const headers: Record<string, string> = { 'X-Parsec-Client': CLIENT_ID };
   if (body !== undefined) headers['Content-Type'] = 'application/json';
-  const res = await fetch(path, {
-    method,
-    headers,
-    body: body === undefined ? undefined : JSON.stringify(body),
-  });
+  let res: Response;
+  try {
+    res = await fetch(path, {
+      method,
+      headers,
+      body: body === undefined ? undefined : JSON.stringify(body),
+    });
+  } catch {
+    onNetworkError();
+    // status 0: no response at all
+    const msg = method === 'GET' ? 'Cannot reach the parsec server.' : 'Cannot reach the parsec server; the change was not saved.';
+    throw new ApiError(msg, 0);
+  }
   const data = await res.json().catch(() => ({}));
   if (!res.ok) {
     if (res.status === 401) onUnauthorized();
+    if (res.status === 502 || res.status === 503 || res.status === 504) onNetworkError();
     throw new ApiError(data.error ?? `${res.status} ${res.statusText}`, res.status, data.output);
   }
   return data as T;

@@ -1,4 +1,4 @@
-import { api, ApiError, CLIENT_ID, setUnauthorizedHandler } from './api';
+import { api, ApiError, CLIENT_ID, setNetworkErrorHandler, setUnauthorizedHandler } from './api';
 import { place, resolve, type Slot } from './lanes';
 import { toDay, toISO, today } from './dates';
 import { addWorkDays, snapWorkday } from './schedule';
@@ -14,6 +14,9 @@ import {
   type Project,
   type Task,
 } from './types';
+
+/** How long a lost connection shows as "reconnecting" before "offline". */
+const OFFLINE_AFTER = 10_000;
 
 export interface Toast {
   id: number;
@@ -111,19 +114,49 @@ class AppState {
   /** Set while a pointer button is held, so a reload never lands mid-drag. */
   pointerDown = false;
 
+  /**
+   * Link to the server, from the live-update stream: 'online' while it is
+   * open, 'reconnecting' just after it drops, 'offline' once retries have
+   * failed for a while.
+   */
+  connection = $state<'online' | 'reconnecting' | 'offline'>('online');
+  private missed = false; // events may have been missed; reload on reconnect
+  private droppedAt = 0; // when the link went down; 0 while online
+  private watchdog: ReturnType<typeof setTimeout> | undefined;
+  private retryTimer: ReturnType<typeof setTimeout> | undefined;
+  private retryDelay = 1000;
+  private networkWatched = false;
+
   private openEvents() {
     if (this.events) return;
-    let dropped = false;
+    this.watchNetwork();
     const es = new EventSource('/api/events');
+    // The server pings every 25 s; silence for longer means a dead link
+    // (sleep, proxy drop) that EventSource itself does not notice.
+    const alive = () => {
+      clearTimeout(this.watchdog);
+      this.watchdog = setTimeout(() => this.lost(), 60_000);
+    };
     es.onopen = () => {
-      // Catch up on anything missed while disconnected.
-      if (dropped) this.scheduleReload();
-      dropped = false;
+      if (this.missed) this.scheduleReload();
+      this.missed = false;
+      this.droppedAt = 0;
+      this.connection = 'online';
+      this.retryDelay = 1000;
+      alive();
     };
     es.onerror = () => {
-      dropped = true;
+      this.missed = true;
+      this.droppedAt ||= Date.now();
+      // CONNECTING: the browser retries by itself (every 3 s, as the server
+      // asks), firing this on each failure. CLOSED: it gave up (e.g. the
+      // proxy answered 502 during a restart), so retry here.
+      if (es.readyState === EventSource.CLOSED) this.lost();
+      else this.connection = Date.now() - this.droppedAt > OFFLINE_AFTER ? 'offline' : 'reconnecting';
     };
+    es.addEventListener('ping', alive);
     es.onmessage = (m) => {
+      alive();
       let e: { kind: string; client?: string };
       try {
         e = JSON.parse(m.data);
@@ -138,8 +171,52 @@ class AppState {
   }
 
   private closeEvents() {
+    clearTimeout(this.watchdog);
+    clearTimeout(this.retryTimer);
     this.events?.close();
     this.events = null;
+  }
+
+  /** Drop the stream and retry with backoff (1 s doubling to 30 s). */
+  private lost() {
+    this.closeEvents();
+    this.missed = true;
+    this.droppedAt ||= Date.now();
+    this.connection = Date.now() - this.droppedAt > OFFLINE_AFTER ? 'offline' : 'reconnecting';
+    this.retryTimer = setTimeout(() => this.reconnect(), this.retryDelay);
+    this.retryDelay = Math.min(this.retryDelay * 2, 30_000);
+  }
+
+  /** Check the session is still valid, then reopen the stream. */
+  async reconnect() {
+    clearTimeout(this.retryTimer);
+    try {
+      this.me = await api.me();
+    } catch {
+      this.lost();
+      return;
+    }
+    if (!this.me.user) this.signedOut();
+    else if (this.role === 'none') this.closeEvents();
+    else this.openEvents();
+  }
+
+  /** Browser network events and failed requests prompt a quicker check. */
+  private watchNetwork() {
+    if (this.networkWatched) return;
+    this.networkWatched = true;
+    window.addEventListener('offline', () => {
+      if (this.events || this.retryTimer) this.lost();
+    });
+    window.addEventListener('online', () => {
+      if (this.connection !== 'online') {
+        this.retryDelay = 1000;
+        this.reconnect();
+      }
+    });
+    setNetworkErrorHandler(() => {
+      if (this.connection === 'online' && this.events) this.lost();
+    });
   }
 
   private scheduleReload() {
@@ -185,7 +262,9 @@ class AppState {
       this.loaded = true;
       this.loadError = '';
     } catch (e) {
-      this.loadError = String((e as Error).message ?? e);
+      // Without a connection, keep showing what we have; the reconnect
+      // reloads. Only an initial load failure replaces the view.
+      if (!this.loaded || !(e instanceof ApiError && e.status === 0)) this.loadError = String((e as Error).message ?? e);
     }
     this.refreshGit();
   }

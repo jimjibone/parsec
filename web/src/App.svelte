@@ -101,6 +101,21 @@
 
       <div class="spacer"></div>
 
+      <button
+        class="ghost conn {app.connection}"
+        disabled={app.connection === 'online'}
+        onclick={() => app.reconnect()}
+        title={app.connection === 'online'
+          ? 'Connected: live updates on'
+          : app.connection === 'reconnecting'
+            ? 'Connection lost, reconnecting. Changes made now may not be saved.'
+            : 'Offline: changes cannot be saved. Click to retry now.'}
+        aria-live="polite"
+      >
+        <span class="conn-dot"></span>
+        {#if app.connection === 'reconnecting'}Reconnecting...{:else if app.connection === 'offline'}Offline{/if}
+      </button>
+
       {#if app.canEdit}
         <div class="history">
           <button
@@ -252,6 +267,55 @@
   .history {
     display: flex;
     gap: 2px;
+  }
+
+  .conn {
+    gap: 6px;
+    font-size: 12px;
+    font-weight: 600;
+  }
+
+  .conn:disabled {
+    opacity: 1;
+    cursor: default;
+    padding-inline: 6px;
+  }
+
+  .conn-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: var(--ok);
+  }
+
+  .conn.reconnecting {
+    color: var(--warn);
+  }
+
+  .conn.reconnecting .conn-dot {
+    background: var(--warn);
+    animation: conn-pulse 1s ease-in-out infinite alternate;
+  }
+
+  .conn.offline {
+    color: var(--danger);
+    border-color: var(--danger);
+  }
+
+  .conn.offline .conn-dot {
+    background: var(--danger);
+  }
+
+  @keyframes conn-pulse {
+    to {
+      opacity: 0.25;
+    }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .conn.reconnecting .conn-dot {
+      animation: none;
+    }
   }
 
   .menu-wrap {
