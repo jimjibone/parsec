@@ -1,0 +1,27 @@
+# systemd unit for a shared parsec server.
+# Install: copy the binary to /usr/local/bin/parsec, this file to
+# /etc/systemd/system/parsec.service, then `systemctl enable --now parsec`.
+[Unit]
+Description=parsec project planner
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+User=parsec
+Group=parsec
+ExecStart=/usr/local/bin/parsec --config /etc/parsec/parsec.yaml
+# Optional: PARSEC_OIDC_CLIENT_SECRET=...
+EnvironmentFile=-/etc/parsec/env
+# Pending changes are committed on stop; give git time to push.
+TimeoutStopSec=60
+Restart=on-failure
+
+StateDirectory=parsec
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/var/lib/parsec
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target

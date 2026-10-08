@@ -1,6 +1,7 @@
 // Package history keeps an in-memory undo/redo stack of changes to the files
 // in a directory. Each step stores the before and after contents of the files
-// it touched, so undo and redo work for any kind of edit.
+// it touched, so undo and redo work for any kind of edit. Steps belong to a
+// user, and each user undoes and redoes only their own steps.
 package history
 
 import (
@@ -9,6 +10,7 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"slices"
 	"sort"
 	"strings"
 )
@@ -17,8 +19,8 @@ var (
 	ErrNothingToUndo = errors.New("nothing to undo")
 	ErrNothingToRedo = errors.New("nothing to redo")
 	// ErrStale means a file was changed by something else after the step was
-	// recorded. The history is cleared rather than overwrite that change.
-	ErrStale = errors.New("files changed outside parsec; undo history cleared")
+	// recorded. The step is dropped rather than overwrite that change.
+	ErrStale = errors.New("changed since by someone else or outside parsec; that step was dropped")
 )
 
 // Files maps a slash-separated path, relative to the directory, to contents.
@@ -26,6 +28,7 @@ var (
 type Files map[string][]byte
 
 type entry struct {
+	user          string
 	label         string
 	paths         []string
 	before, after Files
@@ -33,12 +36,13 @@ type entry struct {
 
 // History is not safe for concurrent use; callers serialise access.
 type History struct {
-	dir        string
-	max        int
+	dir string
+	max int
+	// undo and redo hold every user's steps, oldest first.
 	undo, redo []entry
 }
 
-// State describes the next undo and redo steps; empty means none.
+// State describes a user's next undo and redo steps; empty means none.
 type State struct {
 	Undo string `json:"undo"`
 	Redo string `json:"redo"`
@@ -83,14 +87,14 @@ func (h *History) Capture() (Files, error) {
 }
 
 // Record compares the directory with `before` and pushes the difference as
-// one undo step. No step is pushed when nothing changed. Any new step clears
-// the redo stack.
-func (h *History) Record(label string, before Files) error {
+// one of the user's undo steps, returning the changed paths. Nothing is pushed
+// when nothing changed. A new step clears that user's redo steps.
+func (h *History) Record(user, label string, before Files) ([]string, error) {
 	after, err := h.Capture()
 	if err != nil {
-		return err
+		return nil, err
 	}
-	e := entry{label: label, before: Files{}, after: Files{}}
+	e := entry{user: user, label: label, before: Files{}, after: Files{}}
 	for p := range union(before, after) {
 		if same(before, after, p) {
 			continue
@@ -104,62 +108,81 @@ func (h *History) Record(label string, before Files) error {
 		}
 	}
 	if len(e.paths) == 0 {
-		return nil
+		return nil, nil
 	}
 	sort.Strings(e.paths)
 	h.undo = append(h.undo, e)
 	if len(h.undo) > h.max {
 		h.undo = h.undo[len(h.undo)-h.max:]
 	}
-	h.redo = nil
-	return nil
+	h.redo = slices.DeleteFunc(h.redo, func(x entry) bool { return x.user == user })
+	return e.paths, nil
 }
 
-// Undo restores the files of the latest step and returns its label.
-func (h *History) Undo() (string, error) {
-	if len(h.undo) == 0 {
-		return "", ErrNothingToUndo
+// Step is the result of an undo or redo.
+type Step struct {
+	Label string
+	Paths []string
+}
+
+// Undo restores the files of the user's latest step.
+func (h *History) Undo(user string) (Step, error) {
+	i := last(h.undo, user)
+	if i < 0 {
+		return Step{}, ErrNothingToUndo
 	}
-	e := h.undo[len(h.undo)-1]
+	e := h.undo[i]
+	h.undo = slices.Delete(h.undo, i, i+1)
 	if err := h.apply(e, e.after, e.before); err != nil {
-		return "", err
+		return Step{}, err
 	}
-	h.undo = h.undo[:len(h.undo)-1]
 	h.redo = append(h.redo, e)
-	return e.label, nil
+	return Step{Label: e.label, Paths: e.paths}, nil
 }
 
-// Redo re-applies the latest undone step and returns its label.
-func (h *History) Redo() (string, error) {
-	if len(h.redo) == 0 {
-		return "", ErrNothingToRedo
+// Redo re-applies the user's latest undone step.
+func (h *History) Redo(user string) (Step, error) {
+	i := last(h.redo, user)
+	if i < 0 {
+		return Step{}, ErrNothingToRedo
 	}
-	e := h.redo[len(h.redo)-1]
+	e := h.redo[i]
+	h.redo = slices.Delete(h.redo, i, i+1)
 	if err := h.apply(e, e.before, e.after); err != nil {
-		return "", err
+		return Step{}, err
 	}
-	h.redo = h.redo[:len(h.redo)-1]
 	h.undo = append(h.undo, e)
-	return e.label, nil
+	return Step{Label: e.label, Paths: e.paths}, nil
 }
 
 func (h *History) Clear() {
 	h.undo, h.redo = nil, nil
 }
 
-func (h *History) State() State {
+func (h *History) State(user string) State {
 	var s State
-	if n := len(h.undo); n > 0 {
-		s.Undo = h.undo[n-1].label
+	if i := last(h.undo, user); i >= 0 {
+		s.Undo = h.undo[i].label
 	}
-	if n := len(h.redo); n > 0 {
-		s.Redo = h.redo[n-1].label
+	if i := last(h.redo, user); i >= 0 {
+		s.Redo = h.redo[i].label
 	}
 	return s
 }
 
-// apply checks the step's files still hold `from`, then writes `to`. On any
-// failure the history is cleared, since the stack no longer matches disk.
+func last(es []entry, user string) int {
+	for i := len(es) - 1; i >= 0; i-- {
+		if es[i].user == user {
+			return i
+		}
+	}
+	return -1
+}
+
+// apply checks the step's files still hold `from`, then writes `to`. The
+// caller has already removed the step from its stack, so a stale step is
+// simply dropped. A failed write clears everything, since the stacks no
+// longer match the disk.
 func (h *History) apply(e entry, from, to Files) error {
 	cur := Files{}
 	for _, p := range e.paths {
@@ -168,11 +191,9 @@ func (h *History) apply(e entry, from, to Files) error {
 		case err == nil:
 			cur[p] = b
 		case !errors.Is(err, fs.ErrNotExist):
-			h.Clear()
 			return err
 		}
 		if !same(cur, from, p) {
-			h.Clear()
 			return ErrStale
 		}
 	}

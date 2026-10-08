@@ -116,6 +116,45 @@ func TestCommitPushPull(t *testing.T) {
 	}
 }
 
+func TestCommitPaths(t *testing.T) {
+	isolate(t)
+	r, err := Open(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	// First commit on an empty repo.
+	write(t, filepath.Join(r.dir, "a.yaml"), "a: 1\n")
+	write(t, filepath.Join(r.dir, "b.yaml"), "b: 1\n")
+	if ok, err := r.CommitPaths([]string{"a.yaml", "gone.yaml"}, "Bob Sample <bob@example.com>", "bob edits"); err != nil || !ok {
+		t.Fatalf("commit = %v %v", ok, err)
+	}
+	st, _ := r.Status()
+	if len(st.Files) != 1 || st.Files[0].Path != "b.yaml" || st.Files[0].Code != "??" {
+		t.Fatalf("files = %+v", st.Files)
+	}
+
+	// Deletion plus a new file in a subdirectory; b.yaml stays uncommitted.
+	os.Remove(filepath.Join(r.dir, "a.yaml"))
+	os.MkdirAll(filepath.Join(r.dir, "p", "tasks"), 0o755)
+	write(t, filepath.Join(r.dir, "p", "tasks", "t.yaml"), "t: 1\n")
+	if ok, err := r.CommitPaths([]string{"a.yaml", "p/tasks/t.yaml"}, "Bob Sample <bob@example.com>", "second"); err != nil || !ok {
+		t.Fatalf("commit = %v %v", ok, err)
+	}
+	st, _ = r.Status()
+	if len(st.Files) != 1 || st.Files[0].Path != "b.yaml" {
+		t.Fatalf("files = %+v", st.Files)
+	}
+	log, _ := r.Log(5)
+	if len(log) != 2 || log[0].Author != "Bob Sample" || log[0].Subject != "second" {
+		t.Fatalf("log = %+v", log)
+	}
+
+	// Unchanged paths make no commit.
+	if ok, err := r.CommitPaths([]string{"p/tasks/t.yaml"}, "Bob Sample <bob@example.com>", "none"); err != nil || ok {
+		t.Fatalf("commit = %v %v", ok, err)
+	}
+}
+
 func TestPushWithoutRemote(t *testing.T) {
 	isolate(t)
 	r, err := Open(t.TempDir())

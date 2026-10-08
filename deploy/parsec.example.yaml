@@ -1,0 +1,50 @@
+# parsec server config. Run with: parsec --config /etc/parsec/parsec.yaml
+# Every key is optional except where noted; flags --data and --addr override.
+
+# Listen on localhost; the reverse proxy terminates HTTPS in front.
+addr: 127.0.0.1:7343
+
+# Clone of the GitLab data repository. Created and `git init`ed if missing.
+data: /var/lib/parsec/data
+
+# Address users open. Required for oidc (forms the redirect URL
+# <publicURL>/auth/callback) and used to reject cross-site writes.
+publicURL: https://parsec.example.com
+
+# Accounts (users.yaml) and the session key. Must be outside `data`.
+stateDir: /var/lib/parsec/state
+
+auth:
+  # none: single user, no sign-in (default; keep the server on localhost)
+  # oidc: OpenID Connect, e.g. GitLab
+  # local: usernames and passwords; set them with `parsec --config FILE passwd USERNAME [ROLE]`
+  mode: oidc
+
+  # Usernames that are always admins (GitLab username for oidc). Their role
+  # cannot be changed in the app, so access can never be locked out.
+  admins: [alice]
+
+  # Initial role for someone's first sign-in: none, viewer or editor.
+  # Admins can change it, and everyone's role, in the app's settings panel.
+  defaultRole: viewer
+
+  # Days a sign-in lasts.
+  sessionDays: 30
+
+  oidc:
+    issuer: https://gitlab.example.com
+    clientID: <application ID from GitLab>
+    # The secret can also come from clientSecretFile or the
+    # PARSEC_OIDC_CLIENT_SECRET environment variable (preferred).
+    clientSecretFile: /etc/parsec/oidc-secret
+    scopes: [openid, profile, email]
+    label: GitLab
+
+git:
+  # Commit each person's changes, under their name, once they have not
+  # edited for `idle`. Defaults to on when sign-in is enabled.
+  autoCommit: true
+  idle: 5m
+  # After each automatic commit, pull --rebase and push to the remote
+  # (if one is set). Defaults to on when sign-in is enabled.
+  push: true

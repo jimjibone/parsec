@@ -355,6 +355,10 @@
     if (ev.button !== 0) return;
     ev.stopPropagation();
     ev.preventDefault();
+    if (!app.canEdit) {
+      ui.selectedTask = t.id; // viewers can open the task, read-only
+      return;
+    }
     const g = geo.get(t.id);
     if (!g) return;
     drag = {
@@ -376,7 +380,7 @@
   }
 
   function startLink(ev: PointerEvent, t: Task) {
-    if (ev.button !== 0) return;
+    if (ev.button !== 0 || !app.canEdit) return;
     ev.stopPropagation();
     ev.preventDefault();
     const p = canvasPoint(ev);
@@ -384,7 +388,7 @@
   }
 
   function startMsDrag(ev: PointerEvent, p: Project, m: Milestone) {
-    if (ev.button !== 0) return;
+    if (ev.button !== 0 || !app.canEdit) return;
     ev.stopPropagation();
     ev.preventDefault();
     const d = toDay(m.date);
@@ -491,6 +495,7 @@
   const confirmArrow = new TwoClick();
 
   function removeArrow(a: Arrow) {
+    if (!app.canEdit) return;
     if (confirmArrow.hit(a.key)) {
       app.removeDependency(a.to, a.from);
       return;
@@ -501,7 +506,7 @@
   }
 
   async function onCanvasDblClick(ev: MouseEvent) {
-    if ((ev.target as Element).closest('[data-task-id], .milestone, .ms-pop')) return;
+    if (!app.canEdit || (ev.target as Element).closest('[data-task-id], .milestone, .ms-pop')) return;
     const { x, y } = canvasPoint(ev);
     const row = layout.rows.find((r) => y >= r.top && y < r.top + r.height);
     if (!row) return;
@@ -577,7 +582,7 @@
       return;
     }
     const t = ui.selectedTask ? app.taskById.get(ui.selectedTask) : undefined;
-    if (!t || !ev.altKey) return;
+    if (!t || !ev.altKey || !app.canEdit) return;
     const lane = app.displayLane.get(t.id) ?? 0;
     if (ev.key === 'ArrowUp' && lane > 0) {
       ev.preventDefault();
@@ -705,10 +710,14 @@
       </div>
     {/if}
     <div class="spacer"></div>
-    <span class="hint muted"
-      >Double-click a lane to add a task, or a project's top strip to add a milestone. Drag the dot on a bar's right edge to link.
-      Alt+arrows move the selected task.</span
-    >
+    {#if app.canEdit}
+      <span class="hint muted"
+        >Double-click a lane to add a task, or a project's top strip to add a milestone. Drag the dot on a bar's right edge to link.
+        Alt+arrows move the selected task.</span
+      >
+    {:else}
+      <span class="hint muted">View only</span>
+    {/if}
   </div>
 
   <div class="scroller" bind:this={scroller} onscroll={onScroll}>
@@ -730,7 +739,9 @@
             />
           {:else}
             <span class="muted">Projects</span>
-            <button class="ghost" onclick={() => (newProject = '')}><Icon name="plus" /> Project</button>
+            {#if app.canEdit}
+              <button class="ghost" onclick={() => (newProject = '')}><Icon name="plus" /> Project</button>
+            {/if}
           {/if}
         </div>
 
@@ -778,25 +789,31 @@
                     onblur={(e) => rename(p, e.currentTarget.value)}
                   />
                 {:else}
-                  <span class="name" ondblclick={() => (renaming = p.id)} title="Double-click to rename" role="button" tabindex="-1"
-                    >{p.name}</span
+                  <span
+                    class="name"
+                    ondblclick={() => app.canEdit && (renaming = p.id)}
+                    title={app.canEdit ? 'Double-click to rename' : p.name}
+                    role="button"
+                    tabindex="-1">{p.name}</span
                   >
                   <span class="count muted">{count}</span>
                 {/if}
                 <div class="proj-actions">
-                  <button class="ghost icon-btn" disabled={ri === 0} onclick={() => moveProject(p.id, -1)} title="Move project up"
-                    ><Icon name="up" size={14} /></button
-                  >
-                  <button
-                    class="ghost icon-btn"
-                    disabled={ri === layout.rows.length - 1}
-                    onclick={() => moveProject(p.id, 1)}
-                    title="Move project down"><Icon name="down" size={14} /></button
-                  >
-                  <button class="ghost icon-btn" onclick={() => addTaskTo(p)} title="Add task"><Icon name="plus" /></button>
-                  <button class="ghost icon-btn" onclick={() => addMilestoneTo(p)} title="Add milestone"
-                    ><Icon name="diamond" size={14} /></button
-                  >
+                  {#if app.canEdit}
+                    <button class="ghost icon-btn" disabled={ri === 0} onclick={() => moveProject(p.id, -1)} title="Move project up"
+                      ><Icon name="up" size={14} /></button
+                    >
+                    <button
+                      class="ghost icon-btn"
+                      disabled={ri === layout.rows.length - 1}
+                      onclick={() => moveProject(p.id, 1)}
+                      title="Move project down"><Icon name="down" size={14} /></button
+                    >
+                    <button class="ghost icon-btn" onclick={() => addTaskTo(p)} title="Add task"><Icon name="plus" /></button>
+                    <button class="ghost icon-btn" onclick={() => addMilestoneTo(p)} title="Add milestone"
+                      ><Icon name="diamond" size={14} /></button
+                    >
+                  {/if}
                   <button class="ghost icon-btn" onclick={() => ui.setHidden(p.id, true)} title="Hide project"
                     ><Icon name="eyeOff" /></button
                   >
@@ -994,20 +1011,24 @@
                     style:--wk="{2 * dw}px"
                   ></div>
                 {/if}
-                <div class="handle l" onpointerdown={(e) => startDrag(e, t, 'start')} role="presentation"></div>
+                {#if app.canEdit}
+                  <div class="handle l" onpointerdown={(e) => startDrag(e, t, 'start')} role="presentation"></div>
+                {/if}
                 {#if lay.titleInside}
                   <span class="label">{t.title}</span>
                 {/if}
                 {#if lay.pillsInside}
                   {@render pills(t, lay)}
                 {/if}
-                <div class="handle r" onpointerdown={(e) => startDrag(e, t, 'end')} role="presentation"></div>
-                <div
-                  class="link-dot"
-                  onpointerdown={(e) => startLink(e, t)}
-                  title="Drag to another task to add a dependency"
-                  role="presentation"
-                ></div>
+                {#if app.canEdit}
+                  <div class="handle r" onpointerdown={(e) => startDrag(e, t, 'end')} role="presentation"></div>
+                  <div
+                    class="link-dot"
+                    onpointerdown={(e) => startLink(e, t)}
+                    title="Drag to another task to add a dependency"
+                    role="presentation"
+                  ></div>
+                {/if}
               </div>
               {#if !lay.titleInside && room >= 30}
                 <span

@@ -42,7 +42,8 @@
   }
 </script>
 
-<section class="editor">
+<!-- Viewers see the same fields, disabled. -->
+<fieldset class="editor" disabled={!app.canEdit}>
   <div class="row">
     {#key project.id}
       <input
@@ -106,7 +107,7 @@
       <p class="muted">No milestones.</p>
     {/if}
   </div>
-</section>
+</fieldset>
 
 <style>
   .editor {
@@ -117,6 +118,8 @@
     border: 1px solid var(--border);
     border-radius: 10px;
     background: var(--surface);
+    margin: 0;
+    min-width: 0;
   }
 
   .row {

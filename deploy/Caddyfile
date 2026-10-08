@@ -1,0 +1,5 @@
+# Caddy in front of parsec. Caddy keeps the Host header and streams
+# server-sent events (/api/events) without buffering by default.
+parsec.example.com {
+	reverse_proxy 127.0.0.1:7343
+}

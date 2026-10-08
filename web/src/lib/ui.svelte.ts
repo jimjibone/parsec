@@ -36,6 +36,7 @@ class UiState {
   highlight = $state(''); // timeline: '' = everyone, UNASSIGNED, or a person id
   selectedTask = $state<string | null>(null);
   gitOpen = $state(false);
+  settingsOpen = $state(false);
 
   constructor() {
     const p = loadPrefs();

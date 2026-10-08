@@ -17,6 +17,8 @@ type Project struct {
 	// Order is the display position (ascending); ties fall back to Created.
 	Order   int    `yaml:"order,omitempty" json:"order"`
 	Created string `yaml:"created,omitempty" json:"created"`
+	// Version is a hash of the stored content, for conflict detection.
+	Version string `yaml:"-" json:"version"`
 }
 
 // Task is a unit of work with a date range on the timeline.
@@ -36,14 +38,16 @@ type Task struct {
 	DependsOn     []string `yaml:"dependsOn,omitempty" json:"dependsOn"`
 	Lane          int      `yaml:"lane" json:"lane"`
 	Created       string   `yaml:"created,omitempty" json:"created"`
+	Version       string   `yaml:"-" json:"version"`
 }
 
 // Person can be assigned to tasks. Color is optional (#rrggbb); clients
 // derive a stable default from the ID when it is empty.
 type Person struct {
-	ID    string `yaml:"id" json:"id"`
-	Name  string `yaml:"name" json:"name"`
-	Color string `yaml:"color,omitempty" json:"color"`
+	ID      string `yaml:"id" json:"id"`
+	Name    string `yaml:"name" json:"name"`
+	Color   string `yaml:"color,omitempty" json:"color"`
+	Version string `yaml:"-" json:"version"`
 }
 
 // Snapshot is the full database contents.

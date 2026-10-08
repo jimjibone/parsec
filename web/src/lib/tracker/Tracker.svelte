@@ -131,7 +131,9 @@
   <nav class="side">
     <div class="side-head">
       <h3>Projects</h3>
-      <button class="ghost icon-btn" onclick={() => (newProject = '')} title="New project"><Icon name="plus" /></button>
+      {#if app.canEdit}
+        <button class="ghost icon-btn" onclick={() => (newProject = '')} title="New project"><Icon name="plus" /></button>
+      {/if}
     </div>
     <button class="item" class:active={!selected} onclick={() => (ui.trackerProject = '')}>
       <span class="dot all"></span> All tasks <span class="n">{app.tasks.length}</span>
@@ -143,17 +145,19 @@
           <span class="label">{p.name}</span>
           <span class="n">{app.tasks.filter((t) => t.projectId === p.id).length}</span>
         </button>
-        <div class="move">
-          <button class="ghost icon-btn" disabled={i === 0} onclick={() => app.moveProject(p.id, -1)} title="Move project up"
-            ><Icon name="up" size={12} /></button
-          >
-          <button
-            class="ghost icon-btn"
-            disabled={i === app.projects.length - 1}
-            onclick={() => app.moveProject(p.id, 1)}
-            title="Move project down"><Icon name="down" size={12} /></button
-          >
-        </div>
+        {#if app.canEdit}
+          <div class="move">
+            <button class="ghost icon-btn" disabled={i === 0} onclick={() => app.moveProject(p.id, -1)} title="Move project up"
+              ><Icon name="up" size={12} /></button
+            >
+            <button
+              class="ghost icon-btn"
+              disabled={i === app.projects.length - 1}
+              onclick={() => app.moveProject(p.id, 1)}
+              title="Move project down"><Icon name="down" size={12} /></button
+            >
+          </div>
+        {/if}
       </div>
     {/each}
     {#if newProject !== null}
@@ -172,7 +176,9 @@
 
     <div class="side-head people-head">
       <h3>People</h3>
-      <button class="ghost icon-btn" onclick={() => (newPerson = '')} title="Add person"><Icon name="plus" /></button>
+      {#if app.canEdit}
+        <button class="ghost icon-btn" onclick={() => (newPerson = '')} title="Add person"><Icon name="plus" /></button>
+      {/if}
     </div>
     {#each app.people as p (p.id)}
       <div class="person">
@@ -188,29 +194,36 @@
             onblur={(e) => renamePerson(p.id, e.currentTarget.value)}
           />
         {:else}
-          <label class="swatch" style:background={app.colorOf(p.id)} title="Change colour">
-            <input type="color" value={app.colorOf(p.id)} onchange={(e) => setPersonColor(p, e.currentTarget.value)} />
+          <label class="swatch" style:background={app.colorOf(p.id)} title={app.canEdit ? 'Change colour' : ''}>
+            <input
+              type="color"
+              value={app.colorOf(p.id)}
+              disabled={!app.canEdit}
+              onchange={(e) => setPersonColor(p, e.currentTarget.value)}
+            />
           </label>
           <button
             class="ghost pname"
-            ondblclick={() => (renamingPerson = p.id)}
+            ondblclick={() => app.canEdit && (renamingPerson = p.id)}
             onclick={() => (assigneeFilter = assigneeFilter === p.id ? '' : p.id)}
             class:active={assigneeFilter === p.id}
-            title="Click to filter, double-click to rename"
+            title={app.canEdit ? 'Click to filter, double-click to rename' : 'Click to filter'}
           >
             {p.name}
             <span class="n">{app.tasks.filter((t) => t.assignees.includes(p.id) && t.status !== 'done').length}</span>
           </button>
-          <button
-            class="ghost rm"
-            class:icon-btn={!confirmRemove.is(p.id)}
-            class:armed={confirmRemove.is(p.id)}
-            onclick={() => deletePerson(p.id)}
-            onblur={() => confirmRemove.reset()}
-            aria-label="Remove person"
-            title={confirmRemove.is(p.id) ? 'Click again to remove and unassign from all tasks' : 'Remove person'}
-            ><Icon name="x" size={14} />{#if confirmRemove.is(p.id)}Remove?{/if}</button
-          >
+          {#if app.canEdit}
+            <button
+              class="ghost rm"
+              class:icon-btn={!confirmRemove.is(p.id)}
+              class:armed={confirmRemove.is(p.id)}
+              onclick={() => deletePerson(p.id)}
+              onblur={() => confirmRemove.reset()}
+              aria-label="Remove person"
+              title={confirmRemove.is(p.id) ? 'Click again to remove and unassign from all tasks' : 'Remove person'}
+              ><Icon name="x" size={14} />{#if confirmRemove.is(p.id)}Remove?{/if}</button
+            >
+          {/if}
         {/if}
       </div>
     {/each}
@@ -237,7 +250,9 @@
     {#if !app.projects.length}
       <div class="empty">
         <p class="muted">No projects yet.</p>
-        <button class="primary" onclick={() => (newProject = '')}><Icon name="plus" /> Create a project</button>
+        {#if app.canEdit}
+          <button class="primary" onclick={() => (newProject = '')}><Icon name="plus" /> Create a project</button>
+        {/if}
       </div>
     {:else}
       <div class="filters">
@@ -289,6 +304,7 @@
                   <select
                     class="status-sel {t.status}"
                     value={t.status}
+                    disabled={!app.canEdit}
                     onclick={(e) => e.stopPropagation()}
                     onchange={(e) => setStatus(t, e.currentTarget.value as Task['status'])}
                   >
@@ -310,16 +326,18 @@
             {/each}
           </tbody>
         </table>
-        <form
-          class="add"
-          onsubmit={(e) => {
-            e.preventDefault();
-            addTask();
-          }}
-        >
-          <Icon name="plus" />
-          <input type="text" placeholder={`Add a task to ${selected?.name ?? app.projects[0]?.name}...`} bind:value={newTitle} />
-        </form>
+        {#if app.canEdit}
+          <form
+            class="add"
+            onsubmit={(e) => {
+              e.preventDefault();
+              addTask();
+            }}
+          >
+            <Icon name="plus" />
+            <input type="text" placeholder={`Add a task to ${selected?.name ?? app.projects[0]?.name}...`} bind:value={newTitle} />
+          </form>
+        {/if}
       </div>
     {/if}
   </div>

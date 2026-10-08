@@ -8,6 +8,8 @@ package store
 
 import (
 	"crypto/rand"
+	"crypto/sha256"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"os"
@@ -117,7 +119,10 @@ func (s *Store) Snapshot() Snapshot {
 	snap := Snapshot{
 		Projects: make([]Project, 0, len(s.projects)),
 		Tasks:    make([]Task, 0, len(s.tasks)),
-		People:   append([]Person{}, s.people...),
+		People:   make([]Person, 0, len(s.people)),
+	}
+	for _, p := range s.people {
+		snap.People = append(snap.People, normPerson(p))
 	}
 	for _, p := range s.projects {
 		snap.Projects = append(snap.Projects, normProject(*p))
@@ -139,11 +144,13 @@ func (s *Store) Snapshot() Snapshot {
 	return snap
 }
 
-// normProject/normTask make nil slices empty so JSON clients get [].
+// normProject/normTask/normPerson make nil slices empty so JSON clients get
+// [], and set Version.
 func normProject(p Project) Project {
 	if p.Milestones == nil {
 		p.Milestones = []Milestone{}
 	}
+	p.Version = version(p)
 	return p
 }
 
@@ -154,7 +161,61 @@ func normTask(t Task) Task {
 	if t.DependsOn == nil {
 		t.DependsOn = []string{}
 	}
+	t.Version = version(t, t.ProjectID)
 	return t
+}
+
+func normPerson(p Person) Person {
+	p.Version = version(p)
+	return p
+}
+
+// version hashes an entity's stored fields (plus any extra identity, such as
+// a task's project) into a short opaque string.
+func version(v any, extra ...string) string {
+	b, err := yaml.Marshal(v)
+	if err != nil {
+		return ""
+	}
+	h := sha256.New()
+	h.Write(b)
+	for _, e := range extra {
+		h.Write([]byte{0})
+		h.Write([]byte(e))
+	}
+	return hex.EncodeToString(h.Sum(nil)[:8])
+}
+
+// Versions of current entities, for conflict checks; ok is false if missing.
+
+func (s *Store) TaskVersion(id string) (string, bool) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	t, ok := s.tasks[id]
+	if !ok {
+		return "", false
+	}
+	return normTask(*t).Version, true
+}
+
+func (s *Store) ProjectVersion(id string) (string, bool) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	p, ok := s.projects[id]
+	if !ok {
+		return "", false
+	}
+	return normProject(*p).Version, true
+}
+
+func (s *Store) PersonVersion(id string) (string, bool) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	i := slices.IndexFunc(s.people, func(x Person) bool { return x.ID == id })
+	if i < 0 {
+		return "", false
+	}
+	return normPerson(s.people[i]).Version, true
 }
 
 // ---- projects ----
@@ -502,7 +563,7 @@ func (s *Store) CreatePerson(p Person) (Person, error) {
 		return Person{}, err
 	}
 	s.people = people
-	return p, nil
+	return normPerson(p), nil
 }
 
 func (s *Store) UpdatePerson(p Person) (Person, error) {
@@ -521,7 +582,7 @@ func (s *Store) UpdatePerson(p Person) (Person, error) {
 		return Person{}, err
 	}
 	s.people = people
-	return p, nil
+	return normPerson(p), nil
 }
 
 // DeletePerson removes a person and unassigns them; returns changed tasks.

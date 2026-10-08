@@ -22,6 +22,8 @@ export interface Project {
   /** Display position, ascending. Changed only via the reorder endpoint. */
   order: number;
   created: string;
+  /** Server content hash; sent back on save to detect conflicting edits. */
+  version: string;
 }
 
 export interface Task {
@@ -39,6 +41,7 @@ export interface Task {
   dependsOn: string[];
   lane: number;
   created: string;
+  version: string;
 }
 
 export interface Person {
@@ -46,6 +49,30 @@ export interface Person {
   name: string;
   /** '#rrggbb', or '' to use the default derived from the id. */
   color: string;
+  version: string;
+}
+
+export type Role = 'none' | 'viewer' | 'editor' | 'admin';
+
+export interface User {
+  username: string;
+  name: string;
+  email: string;
+  role: Role;
+  lastSeen: string;
+  /** Admin listed in the server config; role cannot change in the app. */
+  fixed: boolean;
+  hasPassword: boolean;
+}
+
+export interface Me {
+  auth: { mode: 'none' | 'oidc' | 'local'; label?: string };
+  autoCommit: boolean;
+  user: User | null;
+}
+
+export interface UserSettings {
+  defaultRole: Role;
 }
 
 export interface Snapshot {
@@ -68,6 +95,8 @@ export interface GitStatus {
   files: GitFile[];
   rebasing: boolean;
   noCommits: boolean;
+  /** Last automatic commit/sync failure, if any. */
+  autoError: string;
 }
 
 /** Labels of the next undo and redo steps; empty when there is none. */

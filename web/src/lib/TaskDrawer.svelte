@@ -132,179 +132,184 @@
     <span class="dot" style:background={project?.color}></span>
     <span class="muted proj">{project?.name}</span>
     <div class="spacer"></div>
-    <button class="ghost icon-btn" title="Move up a row" disabled={lane === 0} onclick={() => app.saveTask(task, lane - 1)}
-      ><Icon name="up" /></button
-    >
-    <button class="ghost icon-btn" title="Move down a row" onclick={() => app.saveTask(task, lane + 1)}><Icon name="down" /></button>
-    <button
-      class="ghost danger"
-      class:icon-btn={!confirmDelete}
-      class:confirm={confirmDelete}
-      title={confirmDelete ? 'Click again to delete' : 'Delete task'}
-      onclick={remove}
-      onblur={() => (confirmDelete = false)}
-      ><Icon name="trash" />{#if confirmDelete}Delete?{/if}</button
-    >
+    {#if app.canEdit}
+      <button class="ghost icon-btn" title="Move up a row" disabled={lane === 0} onclick={() => app.saveTask(task, lane - 1)}
+        ><Icon name="up" /></button
+      >
+      <button class="ghost icon-btn" title="Move down a row" onclick={() => app.saveTask(task, lane + 1)}><Icon name="down" /></button>
+      <button
+        class="ghost danger"
+        class:icon-btn={!confirmDelete}
+        class:confirm={confirmDelete}
+        title={confirmDelete ? 'Click again to delete' : 'Delete task'}
+        onclick={remove}
+        onblur={() => (confirmDelete = false)}
+        ><Icon name="trash" />{#if confirmDelete}Delete?{/if}</button
+      >
+    {/if}
     <button class="ghost icon-btn" title="Close" onclick={() => (ui.selectedTask = null)}><Icon name="x" /></button>
   </div>
 
-  {#key task.id}
-    <input
-      class="title"
-      type="text"
-      value={task.title}
-      onchange={(e) => save({ title: e.currentTarget.value })}
-      use:focusSelectIfNew={task.title === 'New task'}
-    />
-  {/key}
-
-  <div class="cols">
-    <label class="field">
-      <span>Status</span>
-      <select value={task.status} onchange={(e) => save({ status: e.currentTarget.value as Task['status'] })}>
-        {#each STATUSES as s (s.id)}<option value={s.id}>{s.label}</option>{/each}
-      </select>
-    </label>
-    <label class="field">
-      <span>Project</span>
-      <select value={task.projectId} onchange={(e) => save({ projectId: e.currentTarget.value })}>
-        {#each app.projects as p (p.id)}<option value={p.id}>{p.name}</option>{/each}
-      </select>
-    </label>
-    <label class="field">
-      <span>Start</span>
-      <input type="date" value={task.start} onchange={(e) => setStart(e.currentTarget.value)} />
-    </label>
-    <label class="field">
-      <span>End</span>
-      <input type="date" value={task.end} min={task.start} onchange={(e) => setEnd(e.currentTarget.value)} />
-    </label>
-    <label class="field">
-      <span>Estimate (hours)</span>
+  <!-- Viewers see the same fields, disabled. -->
+  <fieldset class="body" disabled={!app.canEdit}>
+    {#key task.id}
       <input
-        type="number"
-        min="0"
-        step="0.5"
-        value={task.estimateHours || ''}
-        placeholder="0"
-        onchange={(e) => save({ estimateHours: Math.max(0, Number(e.currentTarget.value) || 0) })}
+        class="title"
+        type="text"
+        value={task.title}
+        onchange={(e) => save({ title: e.currentTarget.value })}
+        use:focusSelectIfNew={task.title === 'New task'}
       />
-    </label>
+    {/key}
+
+    <div class="cols">
+      <label class="field">
+        <span>Status</span>
+        <select value={task.status} onchange={(e) => save({ status: e.currentTarget.value as Task['status'] })}>
+          {#each STATUSES as s (s.id)}<option value={s.id}>{s.label}</option>{/each}
+        </select>
+      </label>
+      <label class="field">
+        <span>Project</span>
+        <select value={task.projectId} onchange={(e) => save({ projectId: e.currentTarget.value })}>
+          {#each app.projects as p (p.id)}<option value={p.id}>{p.name}</option>{/each}
+        </select>
+      </label>
+      <label class="field">
+        <span>Start</span>
+        <input type="date" value={task.start} onchange={(e) => setStart(e.currentTarget.value)} />
+      </label>
+      <label class="field">
+        <span>End</span>
+        <input type="date" value={task.end} min={task.start} onchange={(e) => setEnd(e.currentTarget.value)} />
+      </label>
+      <label class="field">
+        <span>Estimate (hours)</span>
+        <input
+          type="number"
+          min="0"
+          step="0.5"
+          value={task.estimateHours || ''}
+          placeholder="0"
+          onchange={(e) => save({ estimateHours: Math.max(0, Number(e.currentTarget.value) || 0) })}
+        />
+      </label>
+      <div class="field">
+        <span>Duration</span>
+        <div class="static">
+          {duration}{task.weekendWork ? '' : ' working'} day{duration === 1 ? '' : 's'}
+          {#if !task.weekendWork && spanDays(task.start, task.end) !== duration}
+            <span class="muted cal">({spanDays(task.start, task.end)} calendar)</span>
+          {/if}
+        </div>
+      </div>
+      <label class="switch">
+        <input type="checkbox" checked={task.weekendWork} onchange={(e) => setWeekendWork(e.currentTarget.checked)} />
+        <span>Works weekends</span>
+      </label>
+    </div>
+
     <div class="field">
-      <span>Duration</span>
-      <div class="static">
-        {duration}{task.weekendWork ? '' : ' working'} day{duration === 1 ? '' : 's'}
-        {#if !task.weekendWork && spanDays(task.start, task.end) !== duration}
-          <span class="muted cal">({spanDays(task.start, task.end)} calendar)</span>
+      <span>Assignees</span>
+      <div class="chips">
+        {#each task.assignees as a (a)}
+          <span class="chip">
+            <span class="dot person-dot" style:background={app.colorOf(a)}></span>
+            {app.personById.get(a)?.name ?? a}
+            <button onclick={() => save({ assignees: task.assignees.filter((x) => x !== a) })} aria-label="Unassign"
+              ><Icon name="x" size={12} /></button
+            >
+          </span>
+        {/each}
+        {#if newPerson !== null}
+          <input
+            type="text"
+            placeholder="Name"
+            bind:value={newPerson}
+            use:focusSelect
+            onkeydown={(e) => {
+              if (e.key === 'Enter') createPerson();
+              if (e.key === 'Escape') newPerson = null;
+            }}
+            onblur={createPerson}
+          />
+        {:else}
+          <select
+            value=""
+            onchange={(e) => {
+              addAssignee(e.currentTarget.value);
+              e.currentTarget.value = '';
+            }}
+          >
+            <option value="">Add...</option>
+            {#each app.people.filter((p) => !task.assignees.includes(p.id)) as p (p.id)}<option value={p.id}>{p.name}</option>{/each}
+            <option value="__new">New person...</option>
+          </select>
         {/if}
       </div>
     </div>
-    <label class="switch">
-      <input type="checkbox" checked={task.weekendWork} onchange={(e) => setWeekendWork(e.currentTarget.checked)} />
-      <span>Works weekends</span>
-    </label>
-  </div>
 
-  <div class="field">
-    <span>Assignees</span>
-    <div class="chips">
-      {#each task.assignees as a (a)}
-        <span class="chip">
-          <span class="dot person-dot" style:background={app.colorOf(a)}></span>
-          {app.personById.get(a)?.name ?? a}
-          <button onclick={() => save({ assignees: task.assignees.filter((x) => x !== a) })} aria-label="Unassign"
-            ><Icon name="x" size={12} /></button
-          >
-        </span>
-      {/each}
-      {#if newPerson !== null}
-        <input
-          type="text"
-          placeholder="Name"
-          bind:value={newPerson}
-          use:focusSelect
-          onkeydown={(e) => {
-            if (e.key === 'Enter') createPerson();
-            if (e.key === 'Escape') newPerson = null;
-          }}
-          onblur={createPerson}
-        />
-      {:else}
-        <select
-          value=""
-          onchange={(e) => {
-            addAssignee(e.currentTarget.value);
-            e.currentTarget.value = '';
-          }}
-        >
-          <option value="">Add...</option>
-          {#each app.people.filter((p) => !task.assignees.includes(p.id)) as p (p.id)}<option value={p.id}>{p.name}</option>{/each}
-          <option value="__new">New person...</option>
-        </select>
-      {/if}
-    </div>
-  </div>
-
-  <div class="field">
-    <span>Depends on (must finish first)</span>
-    <ul class="deps">
-      {#each task.dependsOn as d (d)}
-        {@const dt = app.taskById.get(d)}
-        <li>
-          <span class="dot" style:background={app.projectById.get(dt?.projectId ?? '')?.color}></span>
-          <button class="ghost linkish" onclick={() => (ui.selectedTask = d)}>{dt?.title ?? d}</button>
-          {#if dt && toDay(dt.end) >= toDay(task.start)}<span class="bad" title="Ends on or after this task starts">overlaps</span>{/if}
-          <button class="ghost icon-btn" onclick={() => app.removeDependency(task.id, d)} aria-label="Remove dependency"
-            ><Icon name="x" size={14} /></button
-          >
-        </li>
-      {/each}
-    </ul>
-    <select
-      value=""
-      onchange={(e) => {
-        addDep(e.currentTarget.value);
-        e.currentTarget.value = '';
-      }}
-    >
-      <option value="">Add dependency...</option>
-      {#each depOptions as g (g.project.id)}
-        {#if g.tasks.length}
-          <optgroup label={g.project.name}>
-            {#each g.tasks as t (t.id)}<option value={t.id}>{t.title}</option>{/each}
-          </optgroup>
-        {/if}
-      {/each}
-    </select>
-  </div>
-
-  {#if successors.length}
     <div class="field">
-      <span>Blocks</span>
+      <span>Depends on (must finish first)</span>
       <ul class="deps">
-        {#each successors as s (s.id)}
+        {#each task.dependsOn as d (d)}
+          {@const dt = app.taskById.get(d)}
           <li>
-            <span class="dot" style:background={app.projectById.get(s.projectId)?.color}></span>
-            <button class="ghost linkish" onclick={() => (ui.selectedTask = s.id)}>{s.title}</button>
-            <button class="ghost icon-btn" onclick={() => app.removeDependency(s.id, task.id)} aria-label="Remove dependency"
+            <span class="dot" style:background={app.projectById.get(dt?.projectId ?? '')?.color}></span>
+            <button class="ghost linkish" onclick={() => (ui.selectedTask = d)}>{dt?.title ?? d}</button>
+            {#if dt && toDay(dt.end) >= toDay(task.start)}<span class="bad" title="Ends on or after this task starts">overlaps</span>{/if}
+            <button class="ghost icon-btn" onclick={() => app.removeDependency(task.id, d)} aria-label="Remove dependency"
               ><Icon name="x" size={14} /></button
             >
           </li>
         {/each}
       </ul>
+      <select
+        value=""
+        onchange={(e) => {
+          addDep(e.currentTarget.value);
+          e.currentTarget.value = '';
+        }}
+      >
+        <option value="">Add dependency...</option>
+        {#each depOptions as g (g.project.id)}
+          {#if g.tasks.length}
+            <optgroup label={g.project.name}>
+              {#each g.tasks as t (t.id)}<option value={t.id}>{t.title}</option>{/each}
+            </optgroup>
+          {/if}
+        {/each}
+      </select>
     </div>
-  {/if}
 
-  <label class="field grow">
-    <span>Description</span>
-    {#key task.id}
-      <textarea
-        value={task.description}
-        rows="8"
-        placeholder="Notes, acceptance criteria, links..."
-        onchange={(e) => save({ description: e.currentTarget.value })}></textarea>
-    {/key}
-  </label>
+    {#if successors.length}
+      <div class="field">
+        <span>Blocks</span>
+        <ul class="deps">
+          {#each successors as s (s.id)}
+            <li>
+              <span class="dot" style:background={app.projectById.get(s.projectId)?.color}></span>
+              <button class="ghost linkish" onclick={() => (ui.selectedTask = s.id)}>{s.title}</button>
+              <button class="ghost icon-btn" onclick={() => app.removeDependency(s.id, task.id)} aria-label="Remove dependency"
+                ><Icon name="x" size={14} /></button
+              >
+            </li>
+          {/each}
+        </ul>
+      </div>
+    {/if}
+
+    <label class="field grow">
+      <span>Description</span>
+      {#key task.id}
+        <textarea
+          value={task.description}
+          rows="8"
+          placeholder="Notes, acceptance criteria, links..."
+          onchange={(e) => save({ description: e.currentTarget.value })}></textarea>
+      {/key}
+    </label>
+  </fieldset>
 </aside>
 
 <style>
@@ -323,6 +328,17 @@
     background: var(--surface);
     border-left: 1px solid var(--border);
     box-shadow: var(--shadow);
+  }
+
+  .body {
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+    flex: 1;
+    min-width: 0;
+    margin: 0;
+    padding: 0;
+    border: 0;
   }
 
   .top {

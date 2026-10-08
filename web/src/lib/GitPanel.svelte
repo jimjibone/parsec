@@ -116,6 +116,16 @@
       {/if}
     </section>
 
+    {#if app.me?.autoCommit}
+      <p class="muted small">
+        Automatic commits are on: each person's changes are committed under their name once they stop editing for a few minutes, then synced
+        with the remote. Commit below to save everything now.
+      </p>
+    {/if}
+    {#if git.autoError}
+      <section class="warnbox">{git.autoError}</section>
+    {/if}
+
     {#if git.rebasing}
       <section class="warnbox">
         A rebase stopped on conflicts. Resolve them in the data repository with git, or abort to return to the state before the pull.

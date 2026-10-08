@@ -79,12 +79,17 @@ func Open(dir string) (*Repo, error) {
 }
 
 func (r *Repo) run(args ...string) (string, error) {
+	return r.runEnv(nil, args...)
+}
+
+func (r *Repo) runEnv(env []string, args ...string) (string, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), timeout)
 	defer cancel()
 	cmd := exec.CommandContext(ctx, "git", args...)
 	cmd.Dir = r.dir
 	// Never block on an interactive credential prompt.
 	cmd.Env = append(os.Environ(), "GIT_TERMINAL_PROMPT=0", "GIT_SSH_COMMAND="+sshCommand())
+	cmd.Env = append(cmd.Env, env...)
 	var buf bytes.Buffer
 	cmd.Stdout = &buf
 	cmd.Stderr = &buf
@@ -185,6 +190,69 @@ func (r *Repo) Commit(message string) (Result, error) {
 		out = "Committed: " + message
 	}
 	return Result{Output: out}, nil
+}
+
+// CommitPaths commits the working-tree state of only the given paths (relative
+// to the repo, slash-separated), with `author` as "Name <email>". Other
+// uncommitted changes stay uncommitted. It uses a temporary index, so it
+// works for new and deleted files alike. Returns false when nothing changed.
+func (r *Repo) CommitPaths(paths []string, author, message string) (bool, error) {
+	if _, err := os.Stat(filepath.Join(r.dir, ".git", "rebase-merge")); err == nil {
+		return false, errors.New("rebase in progress")
+	}
+	if _, err := os.Stat(filepath.Join(r.dir, ".git", "rebase-apply")); err == nil {
+		return false, errors.New("rebase in progress")
+	}
+	_, headErr := r.run("rev-parse", "--verify", "--quiet", "HEAD")
+	hasHead := headErr == nil
+
+	// Drop paths that exist neither on disk nor in HEAD (created then
+	// deleted before the commit); git add rejects them.
+	var keep []string
+	for _, p := range paths {
+		if _, err := os.Stat(filepath.Join(r.dir, filepath.FromSlash(p))); err == nil {
+			keep = append(keep, p)
+		} else if hasHead {
+			if _, err := r.run("cat-file", "-e", "HEAD:"+p); err == nil {
+				keep = append(keep, p)
+			}
+		}
+	}
+	if len(keep) == 0 {
+		return false, nil
+	}
+
+	idx, err := os.CreateTemp(filepath.Join(r.dir, ".git"), "parsec-index-*")
+	if err != nil {
+		return false, err
+	}
+	idx.Close()
+	os.Remove(idx.Name()) // git wants to create it; an empty file is invalid
+	defer os.Remove(idx.Name())
+	env := []string{"GIT_INDEX_FILE=" + idx.Name()}
+
+	if hasHead {
+		if _, err := r.runEnv(env, "read-tree", "HEAD"); err != nil {
+			return false, err
+		}
+	}
+	if _, err := r.runEnv(env, append([]string{"add", "-A", "--"}, keep...)...); err != nil {
+		return false, err
+	}
+	if hasHead {
+		if _, err := r.runEnv(env, "diff", "--cached", "--quiet", "HEAD"); err == nil {
+			return false, nil
+		}
+	}
+	if _, err := r.runEnv(env, "commit", "--quiet", "--author="+author, "-m", message); err != nil {
+		return false, err
+	}
+	// Bring the real index up to the new HEAD so the paths do not show as
+	// staged reversions. parsec never keeps anything staged between calls.
+	if _, err := r.run("reset", "--quiet"); err != nil {
+		return true, err
+	}
+	return true, nil
 }
 
 // Pull rebases local commits onto the upstream branch. With no upstream it

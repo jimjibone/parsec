@@ -1,22 +1,37 @@
-import type { GitCommit, GitStatus, HistoryState, Person, Project, Snapshot, Task } from './types';
+import type { GitCommit, GitStatus, HistoryState, Me, Person, Project, Snapshot, Task, User, UserSettings } from './types';
 
 export class ApiError extends Error {
+  status: number;
   output?: string;
-  constructor(message: string, output?: string) {
+  constructor(message: string, status: number, output?: string) {
     super(message);
+    this.status = status;
     this.output = output;
   }
 }
 
+/** Identifies this browser tab, so the server can tell its own quick saves
+ * apart from other people's edits, and so live updates skip the sender. */
+export const CLIENT_ID = Math.random().toString(36).slice(2, 12);
+
+/** Called when the server says the session has ended. */
+let onUnauthorized = () => {};
+export function setUnauthorizedHandler(fn: () => void) {
+  onUnauthorized = fn;
+}
+
 async function req<T>(method: string, path: string, body?: unknown): Promise<T> {
+  const headers: Record<string, string> = { 'X-Parsec-Client': CLIENT_ID };
+  if (body !== undefined) headers['Content-Type'] = 'application/json';
   const res = await fetch(path, {
     method,
-    headers: body === undefined ? undefined : { 'Content-Type': 'application/json' },
+    headers,
     body: body === undefined ? undefined : JSON.stringify(body),
   });
   const data = await res.json().catch(() => ({}));
   if (!res.ok) {
-    throw new ApiError(data.error ?? `${res.status} ${res.statusText}`, data.output);
+    if (res.status === 401) onUnauthorized();
+    throw new ApiError(data.error ?? `${res.status} ${res.statusText}`, res.status, data.output);
   }
   return data as T;
 }
@@ -31,6 +46,10 @@ interface HistoryStep {
 }
 
 export const api = {
+  me: () => req<Me>('GET', '/api/me'),
+  localLogin: (username: string, password: string) => req<void>('POST', '/auth/login', { username, password }),
+  logout: () => req<void>('POST', '/auth/logout'),
+
   state: () => req<Snapshot>('GET', '/api/state'),
 
   createProject: (p: Partial<Project>) => req<Project>('POST', '/api/projects', p),
@@ -58,4 +77,12 @@ export const api = {
   history: () => req<HistoryState>('GET', '/api/history'),
   undo: () => req<HistoryStep>('POST', '/api/history/undo'),
   redo: () => req<HistoryStep>('POST', '/api/history/redo'),
+
+  users: () => req<{ users: User[]; settings: UserSettings }>('GET', '/api/users'),
+  createUser: (u: { username: string; name?: string; email?: string; role: string; password?: string }) =>
+    req<User>('POST', '/api/users', u),
+  updateUser: (username: string, u: { name?: string; email?: string; role?: string; password?: string }) =>
+    req<User>('PUT', `/api/users/${encodeURIComponent(username)}`, u),
+  deleteUser: (username: string) => req<{ ok: boolean }>('DELETE', `/api/users/${encodeURIComponent(username)}`),
+  saveSettings: (s: UserSettings) => req<UserSettings>('PUT', '/api/settings', s),
 };

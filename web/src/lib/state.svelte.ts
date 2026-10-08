@@ -1,9 +1,19 @@
-import { api, ApiError } from './api';
+import { api, ApiError, CLIENT_ID, setUnauthorizedHandler } from './api';
 import { place, resolve, type Slot } from './lanes';
 import { toDay, toISO, today } from './dates';
 import { addWorkDays, snapWorkday } from './schedule';
 import { assignColors, nextPersonColor, UNKNOWN_PERSON_COLOR } from './people';
-import { PROJECT_COLORS, type GitStatus, type HistoryState, type Milestone, type Person, type Project, type Task } from './types';
+import {
+  PROJECT_COLORS,
+  type GitStatus,
+  type HistoryState,
+  type Me,
+  type Milestone,
+  type Role,
+  type Person,
+  type Project,
+  type Task,
+} from './types';
 
 export interface Toast {
   id: number;
@@ -52,6 +62,119 @@ class AppState {
   private gitTimer: ReturnType<typeof setTimeout> | undefined;
   private inflight = new Set<Promise<unknown>>();
   private historyQueue: Promise<void> = Promise.resolve();
+
+  // ---- session ----
+
+  /** Who is signed in; null until the first /api/me answer. */
+  me = $state<Me | null>(null);
+  meError = $state('');
+  role = $derived<Role>(this.me?.user?.role ?? 'none');
+  canEdit = $derived(this.role === 'editor' || this.role === 'admin');
+  isAdmin = $derived(this.role === 'admin');
+  /** More than one person can use this server (any sign-in mode). */
+  shared = $derived(!!this.me && this.me.auth.mode !== 'none');
+
+  /** Fetch the session and, if it grants access, the data and live updates. */
+  async start() {
+    setUnauthorizedHandler(() => this.signedOut());
+    try {
+      this.me = await api.me();
+      this.meError = '';
+    } catch (e) {
+      this.meError = String((e as Error).message ?? e);
+      return;
+    }
+    if (this.role === 'none') {
+      this.closeEvents();
+      return;
+    }
+    await this.load();
+    this.openEvents();
+  }
+
+  async logout() {
+    await api.logout().catch(() => {});
+    this.signedOut();
+  }
+
+  private signedOut() {
+    this.closeEvents();
+    if (this.me) this.me = { ...this.me, user: null };
+    this.loaded = false;
+  }
+
+  // ---- live updates ----
+
+  private events: EventSource | null = null;
+  private reloadTimer: ReturnType<typeof setTimeout> | undefined;
+  private reloadWaiting = false;
+  /** Set while a pointer button is held, so a reload never lands mid-drag. */
+  pointerDown = false;
+
+  private openEvents() {
+    if (this.events) return;
+    let dropped = false;
+    const es = new EventSource('/api/events');
+    es.onopen = () => {
+      // Catch up on anything missed while disconnected.
+      if (dropped) this.scheduleReload();
+      dropped = false;
+    };
+    es.onerror = () => {
+      dropped = true;
+    };
+    es.onmessage = (m) => {
+      let e: { kind: string; client?: string };
+      try {
+        e = JSON.parse(m.data);
+      } catch {
+        return;
+      }
+      if (e.kind === 'data' && e.client !== CLIENT_ID) this.scheduleReload();
+      else if (e.kind === 'git') this.refreshGit();
+      else if (e.kind === 'users') this.refreshMe();
+    };
+    this.events = es;
+  }
+
+  private closeEvents() {
+    this.events?.close();
+    this.events = null;
+  }
+
+  private scheduleReload() {
+    clearTimeout(this.reloadTimer);
+    this.reloadTimer = setTimeout(() => {
+      if (this.pointerDown || this.inflight.size) {
+        this.reloadWaiting = true;
+        return;
+      }
+      this.load();
+    }, 250);
+  }
+
+  /** Called on pointer release; runs a reload that waited for a drag. */
+  pointerReleased() {
+    this.pointerDown = false;
+    if (this.reloadWaiting) {
+      this.reloadWaiting = false;
+      this.scheduleReload();
+    }
+  }
+
+  /** Role changes apply without a page reload. */
+  private async refreshMe() {
+    try {
+      const was = this.role;
+      this.me = await api.me();
+      if (this.role !== was) {
+        if (this.role === 'none') this.closeEvents();
+        else if (!this.loaded) await this.start();
+      }
+    } catch {
+      /* the next request reports it */
+    }
+  }
 
   async load() {
     try {
