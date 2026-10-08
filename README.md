@@ -199,3 +199,7 @@ data (e.g. after a merge) are resolved on display and fixed on the next edit.
 
 View preferences (zoom, collapsed and hidden projects) are stored per browser,
 not in the data repository.
+
+## License
+
+[Apache License 2.0](LICENSE).
