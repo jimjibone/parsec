@@ -29,7 +29,10 @@ come from git.
   moving a task keeps its working-day length, start/end dates skip weekends,
   and weekend days inside a bar are faded. Tick "Works weekends" on a task to
   treat every day as a working day.
-- Milestones per project, shown as diamonds with a marker line.
+- Milestones per project, shown as diamonds with a marker line. Double-click
+  a project's top strip (or use the diamond button on its sidebar row) to add
+  one, drag a diamond to change its date, and click it to rename, set the date
+  or delete it.
 - Continuous horizontal scroll (the range grows as you scroll), day/week/month
   zoom, a Today button, and click-drag panning on empty space.
 - Assignee initials on bars, in each person's colour (set in the people list;

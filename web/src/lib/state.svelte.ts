@@ -3,7 +3,7 @@ import { place, resolve, type Slot } from './lanes';
 import { toDay, toISO, today } from './dates';
 import { addWorkDays, snapWorkday } from './schedule';
 import { assignColors, nextPersonColor, UNKNOWN_PERSON_COLOR } from './people';
-import { PROJECT_COLORS, type GitStatus, type Person, type Project, type Task } from './types';
+import { PROJECT_COLORS, type GitStatus, type Milestone, type Person, type Project, type Task } from './types';
 
 export interface Toast {
   id: number;
@@ -200,10 +200,32 @@ class AppState {
     return p;
   }
 
-  async saveProject(p: Project) {
+  async saveProject(p: Project): Promise<Project | undefined> {
     this.projects = this.projects.map((x) => (x.id === p.id ? p : x));
     const saved = await this.run(() => api.updateProject(p));
     if (saved) this.projects = this.projects.map((x) => (x.id === saved.id ? saved : x));
+    return saved;
+  }
+
+  /** Add a milestone; resolves to it with its server-assigned id. */
+  async addMilestone(projectId: string, name: string, date: string): Promise<Milestone | undefined> {
+    const p = this.projectById.get(projectId);
+    if (!p) return undefined;
+    const before = new Set(p.milestones.map((m) => m.id));
+    const saved = await this.saveProject({ ...p, milestones: [...p.milestones, { id: '', name, date }] });
+    return saved?.milestones.find((m) => !before.has(m.id));
+  }
+
+  async saveMilestone(projectId: string, m: Milestone) {
+    const p = this.projectById.get(projectId);
+    if (!p || !m.name.trim() || !m.date) return;
+    await this.saveProject({ ...p, milestones: p.milestones.map((x) => (x.id === m.id ? m : x)) });
+  }
+
+  async deleteMilestone(projectId: string, id: string) {
+    const p = this.projectById.get(projectId);
+    if (!p) return;
+    await this.saveProject({ ...p, milestones: p.milestones.filter((x) => x.id !== id) });
   }
 
   /**
