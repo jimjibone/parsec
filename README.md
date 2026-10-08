@@ -46,6 +46,11 @@ come from git.
   (name, colour, description, milestones), people list.
 - Git panel: changed files, commit, pull (rebase), push, sync, remote URL,
   history, abort a conflicted rebase.
+- Undo/redo of uncommitted changes: buttons next to the git button, or
+  Cmd+Z / Cmd+Shift+Z (Ctrl+Z / Ctrl+Shift+Z / Ctrl+Y elsewhere) outside
+  text fields. The server keeps the stack in memory; commit, pull and sync
+  clear it, as does a restart. If a file was edited outside parsec since the
+  change, undo refuses and clears the stack.
 - Light/dark theme follows the system setting.
 
 ## Running

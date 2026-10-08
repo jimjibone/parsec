@@ -24,7 +24,28 @@
   });
 
   const dirty = $derived(app.git?.files.length ?? 0);
+
+  const mac = /Mac|iPhone|iPad/.test(navigator.platform);
+  const mod = mac ? 'Cmd+' : 'Ctrl+';
+
+  // Text fields keep the browser's own undo for their contents.
+  const TEXT_FIELD = 'textarea, input:not([type=checkbox], [type=radio], [type=button], [type=submit], [type=color], [type=range])';
+
+  function onKey(e: KeyboardEvent) {
+    if (!(mac ? e.metaKey : e.ctrlKey) || e.altKey) return;
+    const k = e.key.toLowerCase();
+    const redo = (k === 'z' && e.shiftKey) || (!mac && k === 'y' && !e.shiftKey);
+    const undo = k === 'z' && !e.shiftKey;
+    if (!undo && !redo) return;
+    const t = e.target;
+    if (t instanceof HTMLElement && (t.isContentEditable || t.closest(TEXT_FIELD))) return;
+    e.preventDefault();
+    if (redo) app.redo();
+    else app.undo();
+  }
 </script>
+
+<svelte:window onkeydown={onKey} />
 
 <div class="shell">
   <header>
@@ -43,6 +64,27 @@
     </nav>
 
     <div class="spacer"></div>
+
+    <div class="history">
+      <button
+        class="icon-btn"
+        disabled={!app.history.undo}
+        onclick={() => app.undo()}
+        title={app.history.undo ? `Undo: ${app.history.undo} (${mod}Z)` : 'Nothing to undo'}
+        aria-label="Undo"
+      >
+        <Icon name="undo" />
+      </button>
+      <button
+        class="icon-btn"
+        disabled={!app.history.redo}
+        onclick={() => app.redo()}
+        title={app.history.redo ? `Redo: ${app.history.redo} (${mod}Shift+Z)` : 'Nothing to redo'}
+        aria-label="Redo"
+      >
+        <Icon name="redo" />
+      </button>
+    </div>
 
     <button class="git-btn" class:open={ui.gitOpen} onclick={() => (ui.gitOpen = !ui.gitOpen)} title="Git sync">
       <Icon name="branch" />
@@ -136,6 +178,11 @@
 
   .spacer {
     flex: 1;
+  }
+
+  .history {
+    display: flex;
+    gap: 2px;
   }
 
   .git-btn.open {

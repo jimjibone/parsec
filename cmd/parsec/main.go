@@ -9,6 +9,7 @@ import (
 
 	"parsec/internal/api"
 	"parsec/internal/gitrepo"
+	"parsec/internal/history"
 	"parsec/internal/store"
 	"parsec/internal/webui"
 )
@@ -31,7 +32,7 @@ func main() {
 		log.Fatalf("load data: %v", err)
 	}
 
-	srv := api.New(st, repo, webui.FS())
+	srv := api.New(st, repo, history.New(dir, 200), webui.FS())
 	log.Printf("parsec: data %s, listening on http://%s", dir, *addr)
 	log.Fatal(http.ListenAndServe(*addr, srv.Handler()))
 }

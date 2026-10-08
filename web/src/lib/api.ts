@@ -1,4 +1,4 @@
-import type { GitCommit, GitStatus, Person, Project, Snapshot, Task } from './types';
+import type { GitCommit, GitStatus, HistoryState, Person, Project, Snapshot, Task } from './types';
 
 export class ApiError extends Error {
   output?: string;
@@ -25,6 +25,11 @@ interface Changed {
   changedTasks: Task[];
 }
 
+interface HistoryStep {
+  label: string;
+  history: HistoryState;
+}
+
 export const api = {
   state: () => req<Snapshot>('GET', '/api/state'),
 
@@ -49,4 +54,8 @@ export const api = {
   gitSync: () => req<{ output: string }>('POST', '/api/git/sync'),
   gitAbortRebase: () => req<{ output: string }>('POST', '/api/git/abort-rebase'),
   gitSetRemote: (url: string) => req<GitStatus>('PUT', '/api/git/remote', { url }),
+
+  history: () => req<HistoryState>('GET', '/api/history'),
+  undo: () => req<HistoryStep>('POST', '/api/history/undo'),
+  redo: () => req<HistoryStep>('POST', '/api/history/redo'),
 };

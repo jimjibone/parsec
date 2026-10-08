@@ -17,6 +17,8 @@
     timeline: 'M3 6h10M7 12h12M5 18h8',
     list: 'M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01',
     diamond: 'M12 2l10 10-10 10L2 12z',
+    undo: 'M9 14L4 9l5-5M4 9h10.5a5.5 5.5 0 010 11H11',
+    redo: 'M15 14l5-5-5-5M20 9H9.5a5.5 5.5 0 000 11H13',
   } as const;
   export type IconName = keyof typeof PATHS;
 </script>

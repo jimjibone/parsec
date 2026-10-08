@@ -70,6 +70,12 @@ export interface GitStatus {
   noCommits: boolean;
 }
 
+/** Labels of the next undo and redo steps; empty when there is none. */
+export interface HistoryState {
+  undo: string;
+  redo: string;
+}
+
 export interface GitCommit {
   hash: string;
   author: string;

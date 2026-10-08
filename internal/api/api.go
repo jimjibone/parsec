@@ -11,20 +11,22 @@ import (
 	"sync"
 
 	"parsec/internal/gitrepo"
+	"parsec/internal/history"
 	"parsec/internal/store"
 )
 
 type Server struct {
-	store *store.Store
-	repo  *gitrepo.Repo
-	ui    fs.FS
+	store   *store.Store
+	repo    *gitrepo.Repo
+	history *history.History
+	ui      fs.FS
 
 	// mu serialises writes and git operations so a pull never races a save.
 	mu sync.Mutex
 }
 
-func New(s *store.Store, r *gitrepo.Repo, ui fs.FS) *Server {
-	return &Server{store: s, repo: r, ui: ui}
+func New(s *store.Store, r *gitrepo.Repo, h *history.History, ui fs.FS) *Server {
+	return &Server{store: s, repo: r, history: h, ui: ui}
 }
 
 func (s *Server) Handler() http.Handler {
@@ -34,7 +36,7 @@ func (s *Server) Handler() http.Handler {
 		writeJSON(w, http.StatusOK, s.store.Snapshot())
 	})
 
-	mux.HandleFunc("POST /api/projects", s.locked(func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("POST /api/projects", s.mutating("Create project", func(w http.ResponseWriter, r *http.Request) {
 		var p store.Project
 		if !readJSON(w, r, &p) {
 			return
@@ -42,7 +44,7 @@ func (s *Server) Handler() http.Handler {
 		respond(w)(s.store.CreateProject(p))
 	}))
 	// Body: {"ids": [...]} listing every project in the new order.
-	mux.HandleFunc("PUT /api/projects/order", s.locked(func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("PUT /api/projects/order", s.mutating("Reorder projects", func(w http.ResponseWriter, r *http.Request) {
 		var body struct {
 			IDs []string `json:"ids"`
 		}
@@ -51,7 +53,7 @@ func (s *Server) Handler() http.Handler {
 		}
 		respond(w)(s.store.ReorderProjects(body.IDs))
 	}))
-	mux.HandleFunc("PUT /api/projects/{id}", s.locked(func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("PUT /api/projects/{id}", s.mutating("Edit project", func(w http.ResponseWriter, r *http.Request) {
 		var p store.Project
 		if !readJSON(w, r, &p) {
 			return
@@ -59,11 +61,11 @@ func (s *Server) Handler() http.Handler {
 		p.ID = r.PathValue("id")
 		respond(w)(s.store.UpdateProject(p))
 	}))
-	mux.HandleFunc("DELETE /api/projects/{id}", s.locked(func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("DELETE /api/projects/{id}", s.mutating("Delete project", func(w http.ResponseWriter, r *http.Request) {
 		respond(w)(changed(s.store.DeleteProject(r.PathValue("id"))))
 	}))
 
-	mux.HandleFunc("POST /api/tasks", s.locked(func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("POST /api/tasks", s.mutating("Create task", func(w http.ResponseWriter, r *http.Request) {
 		var t store.Task
 		if !readJSON(w, r, &t) {
 			return
@@ -71,25 +73,25 @@ func (s *Server) Handler() http.Handler {
 		respond(w)(s.store.CreateTask(t))
 	}))
 	// Batch replace; body is an array of full tasks.
-	mux.HandleFunc("PUT /api/tasks", s.locked(func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("PUT /api/tasks", s.mutating("Edit task", func(w http.ResponseWriter, r *http.Request) {
 		var ts []store.Task
 		if !readJSON(w, r, &ts) {
 			return
 		}
 		respond(w)(s.store.UpdateTasks(ts))
 	}))
-	mux.HandleFunc("DELETE /api/tasks/{id}", s.locked(func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("DELETE /api/tasks/{id}", s.mutating("Delete task", func(w http.ResponseWriter, r *http.Request) {
 		respond(w)(changed(s.store.DeleteTask(r.PathValue("id"))))
 	}))
 
-	mux.HandleFunc("POST /api/people", s.locked(func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("POST /api/people", s.mutating("Add person", func(w http.ResponseWriter, r *http.Request) {
 		var p store.Person
 		if !readJSON(w, r, &p) {
 			return
 		}
 		respond(w)(s.store.CreatePerson(p))
 	}))
-	mux.HandleFunc("PUT /api/people/{id}", s.locked(func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("PUT /api/people/{id}", s.mutating("Edit person", func(w http.ResponseWriter, r *http.Request) {
 		var p store.Person
 		if !readJSON(w, r, &p) {
 			return
@@ -97,7 +99,7 @@ func (s *Server) Handler() http.Handler {
 		p.ID = r.PathValue("id")
 		respond(w)(s.store.UpdatePerson(p))
 	}))
-	mux.HandleFunc("DELETE /api/people/{id}", s.locked(func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("DELETE /api/people/{id}", s.mutating("Remove person", func(w http.ResponseWriter, r *http.Request) {
 		respond(w)(changed(s.store.DeletePerson(r.PathValue("id"))))
 	}))
 
@@ -114,12 +116,16 @@ func (s *Server) Handler() http.Handler {
 		if !readJSON(w, r, &body) {
 			return
 		}
-		respond(w)(s.repo.Commit(body.Message))
+		res, err := s.repo.Commit(body.Message)
+		if err == nil {
+			s.history.Clear() // undo covers uncommitted changes only
+		}
+		respond(w)(res, err)
 	}))
-	mux.HandleFunc("POST /api/git/pull", s.locked(s.gitOp(s.repo.Pull)))
-	mux.HandleFunc("POST /api/git/push", s.locked(s.gitOp(s.repo.Push)))
-	mux.HandleFunc("POST /api/git/sync", s.locked(s.gitOp(s.repo.Sync)))
-	mux.HandleFunc("POST /api/git/abort-rebase", s.locked(s.gitOp(s.repo.AbortRebase)))
+	mux.HandleFunc("POST /api/git/pull", s.locked(s.gitOp(s.repo.Pull, true)))
+	mux.HandleFunc("POST /api/git/push", s.locked(s.gitOp(s.repo.Push, false)))
+	mux.HandleFunc("POST /api/git/sync", s.locked(s.gitOp(s.repo.Sync, true)))
+	mux.HandleFunc("POST /api/git/abort-rebase", s.locked(s.gitOp(s.repo.AbortRebase, true)))
 	mux.HandleFunc("PUT /api/git/remote", s.locked(func(w http.ResponseWriter, r *http.Request) {
 		var body struct {
 			URL string `json:"url"`
@@ -134,6 +140,12 @@ func (s *Server) Handler() http.Handler {
 		respond(w)(s.repo.Status())
 	}))
 
+	mux.HandleFunc("GET /api/history", s.locked(func(w http.ResponseWriter, r *http.Request) {
+		writeJSON(w, http.StatusOK, s.history.State())
+	}))
+	mux.HandleFunc("POST /api/history/undo", s.locked(s.historyOp(s.history.Undo)))
+	mux.HandleFunc("POST /api/history/redo", s.locked(s.historyOp(s.history.Redo)))
+
 	mux.HandleFunc("/api/", func(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusNotFound, map[string]string{"error": "not found"})
 	})
@@ -141,11 +153,51 @@ func (s *Server) Handler() http.Handler {
 	return mux
 }
 
+// mutating runs a handler that writes data files and records what it changed
+// as one undo step, whether or not the handler succeeded.
+func (s *Server) mutating(label string, h http.HandlerFunc) http.HandlerFunc {
+	return s.locked(func(w http.ResponseWriter, r *http.Request) {
+		before, err := s.history.Capture()
+		if err != nil {
+			writeError(w, err)
+			return
+		}
+		h(w, r)
+		if err := s.history.Record(label, before); err != nil {
+			log.Printf("record undo step: %v", err)
+			s.history.Clear()
+		}
+	})
+}
+
+// historyOp runs an undo or redo, then reloads the store. The body has the
+// label of the step and the new history state.
+func (s *Server) historyOp(op func() (string, error)) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		label, err := op()
+		if rerr := s.store.Reload(); rerr != nil {
+			log.Printf("reload after undo/redo: %v", rerr)
+			if err == nil {
+				err = rerr
+			}
+		}
+		if err != nil {
+			writeError(w, err)
+			return
+		}
+		writeJSON(w, http.StatusOK, map[string]any{"label": label, "history": s.history.State()})
+	}
+}
+
 // gitOp runs an operation that may change files on disk, then reloads the
 // store so the UI sees pulled changes. The result includes reload errors.
-func (s *Server) gitOp(op func() (gitrepo.Result, error)) http.HandlerFunc {
+// `clearHistory` drops the undo stack for operations that can change files.
+func (s *Server) gitOp(op func() (gitrepo.Result, error), clearHistory bool) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		res, err := op()
+		if clearHistory {
+			s.history.Clear()
+		}
 		if rerr := s.store.Reload(); rerr != nil {
 			log.Printf("reload after git: %v", rerr)
 			if err == nil {
@@ -216,7 +268,10 @@ func writeError(w http.ResponseWriter, err error) {
 		status = http.StatusBadRequest
 	case errors.Is(err, store.ErrNotFound):
 		status = http.StatusNotFound
-	case errors.As(err, &ge):
+	case errors.As(err, &ge),
+		errors.Is(err, history.ErrNothingToUndo),
+		errors.Is(err, history.ErrNothingToRedo),
+		errors.Is(err, history.ErrStale):
 		status = http.StatusConflict
 	}
 	writeJSON(w, status, map[string]string{"error": err.Error()})

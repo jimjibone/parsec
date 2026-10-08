@@ -3,7 +3,7 @@ import { place, resolve, type Slot } from './lanes';
 import { toDay, toISO, today } from './dates';
 import { addWorkDays, snapWorkday } from './schedule';
 import { assignColors, nextPersonColor, UNKNOWN_PERSON_COLOR } from './people';
-import { PROJECT_COLORS, type GitStatus, type Milestone, type Person, type Project, type Task } from './types';
+import { PROJECT_COLORS, type GitStatus, type HistoryState, type Milestone, type Person, type Project, type Task } from './types';
 
 export interface Toast {
   id: number;
@@ -18,6 +18,7 @@ class AppState {
   loaded = $state(false);
   loadError = $state('');
   git = $state<GitStatus | null>(null);
+  history = $state<HistoryState>({ undo: '', redo: '' });
   toasts = $state<Toast[]>([]);
 
   taskById = $derived(new Map(this.tasks.map((t) => [t.id, t])));
@@ -49,6 +50,8 @@ class AppState {
 
   private toastSeq = 0;
   private gitTimer: ReturnType<typeof setTimeout> | undefined;
+  private inflight = new Set<Promise<unknown>>();
+  private historyQueue: Promise<void> = Promise.resolve();
 
   async load() {
     try {
@@ -74,19 +77,28 @@ class AppState {
     this.toasts = this.toasts.filter((t) => t.id !== id);
   }
 
+  /** Refresh git status and the undo/redo state (debounced). */
   refreshGit() {
     clearTimeout(this.gitTimer);
     this.gitTimer = setTimeout(async () => {
-      try {
-        this.git = await api.gitStatus();
-      } catch {
-        this.git = null;
-      }
+      const [git, history] = await Promise.allSettled([api.gitStatus(), api.history()]);
+      this.git = git.status === 'fulfilled' ? git.value : null;
+      this.history = history.status === 'fulfilled' ? history.value : { undo: '', redo: '' };
     }, 300);
   }
 
   /** Run a mutation; on failure show the error and resync from the server. */
   private async run<T>(fn: () => Promise<T>): Promise<T | undefined> {
+    const p = this.attempt(fn);
+    this.inflight.add(p);
+    try {
+      return await p;
+    } finally {
+      this.inflight.delete(p);
+    }
+  }
+
+  private async attempt<T>(fn: () => Promise<T>): Promise<T | undefined> {
     try {
       const r = await fn();
       this.refreshGit();
@@ -96,6 +108,33 @@ class AppState {
       await this.load();
       return undefined;
     }
+  }
+
+  undo() {
+    return this.step('undo');
+  }
+
+  redo() {
+    return this.step('redo');
+  }
+
+  /**
+   * Undo or redo one server-side step, after any saves still in flight so the
+   * step undone is the one the user last saw. Repeated calls run in order.
+   */
+  private step(kind: 'undo' | 'redo') {
+    this.historyQueue = this.historyQueue.then(async () => {
+      await Promise.allSettled([...this.inflight]);
+      try {
+        const r = await (kind === 'undo' ? api.undo() : api.redo());
+        this.history = r.history;
+        this.toast(`${kind === 'undo' ? 'Undid' : 'Redid'}: ${r.label}`, 'info');
+      } catch (e) {
+        this.toast(e instanceof ApiError ? e.message : String(e), 'info');
+      }
+      await this.load();
+    });
+    return this.historyQueue;
   }
 
   private mergeTasks(ts: Task[]) {
