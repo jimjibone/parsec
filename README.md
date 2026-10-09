@@ -196,7 +196,7 @@ the user has a public email address; without it, commits use
 make dev-server   # Go API on :7343, data in ./parsec-data
 make dev-web      # Vite on :5173, proxies /api to :7343
 make check        # go vet + svelte-check
-make test         # Go tests
+make test         # Go tests + web unit tests (vitest)
 ```
 
 ## Data layout
