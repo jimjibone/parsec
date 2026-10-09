@@ -3,6 +3,7 @@ import { place, resolve, type Slot } from './lanes';
 import { toDay, toISO, today } from './dates';
 import { addWorkDays, snapWorkday } from './schedule';
 import { assignColors, nextPersonColor, UNKNOWN_PERSON_COLOR } from './people';
+import { taskPressure, type Pressure } from './pressure';
 import {
   PROJECT_COLORS,
   type GitStatus,
@@ -11,6 +12,7 @@ import {
   type Milestone,
   type Role,
   type Person,
+  type Planning,
   type Project,
   type Task,
 } from './types';
@@ -28,6 +30,7 @@ class AppState {
   projects = $state<Project[]>([]);
   tasks = $state<Task[]>([]);
   people = $state<Person[]>([]);
+  planning = $state<Planning>({ hoursPerDay: 6, assigneeFactor: 1, version: '' });
   loaded = $state(false);
   loadError = $state('');
   git = $state<GitStatus | null>(null);
@@ -41,6 +44,14 @@ class AppState {
 
   colorOf(personId: string): string {
     return this.personColors.get(personId) ?? UNKNOWN_PERSON_COLOR;
+  }
+
+  /** A person's hours per working day, or the team default when unset. */
+  hoursOf = (personId: string): number => this.personById.get(personId)?.hoursPerDay || this.planning.hoursPerDay;
+
+  /** Task pressure over [s, e] (defaults to the stored dates; pass live drag days). */
+  pressureOf(t: Task, s = toDay(t.start), e = toDay(t.end)): Pressure | null {
+    return taskPressure(t, s, e, this.planning, this.hoursOf);
   }
 
   /** Conflict-free lane per task, computed from stored lanes. */
@@ -259,6 +270,7 @@ class AppState {
       this.projects = s.projects;
       this.tasks = s.tasks;
       this.people = s.people;
+      this.planning = s.planning;
       this.loaded = true;
       this.loadError = '';
     } catch (e) {
@@ -504,6 +516,12 @@ class AppState {
   async savePerson(p: Person) {
     this.people = this.people.map((x) => (x.id === p.id ? p : x));
     await this.run(() => api.updatePerson(p));
+  }
+
+  async savePlanning(p: Planning) {
+    this.planning = p;
+    const saved = await this.run(() => api.updatePlanning(p));
+    if (saved) this.planning = saved;
   }
 
   async deletePerson(id: string) {

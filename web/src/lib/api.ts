@@ -1,4 +1,4 @@
-import type { GitCommit, GitStatus, HistoryState, Me, Person, Project, Snapshot, Task, User, UserSettings } from './types';
+import type { GitCommit, GitStatus, HistoryState, Me, Person, Planning, Project, Snapshot, Task, User, UserSettings } from './types';
 
 export class ApiError extends Error {
   status: number;
@@ -80,6 +80,8 @@ export const api = {
   createPerson: (name: string, color: string) => req<Person>('POST', '/api/people', { name, color }),
   updatePerson: (p: Person) => req<Person>('PUT', `/api/people/${p.id}`, p),
   deletePerson: (id: string) => req<Changed>('DELETE', `/api/people/${id}`),
+
+  updatePlanning: (p: Planning) => req<Planning>('PUT', '/api/planning', p),
 
   gitStatus: () => req<GitStatus>('GET', '/api/git/status'),
   gitLog: () => req<GitCommit[]>('GET', '/api/git/log'),

@@ -49,6 +49,17 @@ export interface Person {
   name: string;
   /** '#rrggbb', or '' to use the default derived from the id. */
   color: string;
+  /** Focused hours per working day; 0 uses the team default (Planning). */
+  hoursPerDay: number;
+  version: string;
+}
+
+/** Team-wide capacity settings for task pressure, stored in planning.yaml. */
+export interface Planning {
+  /** Focused hours one person gives a task per working day. */
+  hoursPerDay: number;
+  /** How much each assignee after the first adds (0..1); 1 = even split. */
+  assigneeFactor: number;
   version: string;
 }
 
@@ -79,6 +90,7 @@ export interface Snapshot {
   projects: Project[];
   tasks: Task[];
   people: Person[];
+  planning: Planning;
 }
 
 export interface GitFile {

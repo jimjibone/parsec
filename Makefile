@@ -25,8 +25,9 @@ check: web/node_modules
 	go vet ./...
 	cd web && npm run check
 
-test:
+test: web/node_modules
 	go test ./...
+	cd web && npm test
 
 clean:
 	rm -f parsec

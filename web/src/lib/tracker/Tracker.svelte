@@ -5,9 +5,10 @@
   import ProjectEditor from './ProjectEditor.svelte';
   import { TwoClick } from '../confirm.svelte';
   import { formatShort, toDay, toISO, today } from '../dates';
+  import { fmtRatio, pressureLabel } from '../pressure';
   import { STATUSES, type Person, type Task } from '../types';
 
-  type SortKey = 'title' | 'project' | 'status' | 'start' | 'end' | 'estimate' | 'created';
+  type SortKey = 'title' | 'project' | 'status' | 'start' | 'end' | 'estimate' | 'pressure' | 'created';
 
   let search = $state('');
   let statusFilter = $state('');
@@ -22,6 +23,8 @@
   const selected = $derived(ui.trackerProject ? app.projectById.get(ui.trackerProject) : undefined);
 
   const statusOrder = Object.fromEntries(STATUSES.map((s, i) => [s.id, i]));
+
+  const pressure = $derived(new Map(app.tasks.map((t) => [t.id, app.pressureOf(t)])));
 
   const rows = $derived.by(() => {
     const q = search.trim().toLowerCase();
@@ -46,11 +49,19 @@
           return t.end;
         case 'estimate':
           return t.estimateHours;
+        case 'pressure':
+          return pressure.get(t.id)?.ratio ?? -1;
         case 'created':
           return t.created;
       }
     };
     return list.sort((a, b) => {
+      // Tasks with no pressure sort last in both directions.
+      if (sortKey === 'pressure') {
+        const na = !pressure.get(a.id);
+        const nb = !pressure.get(b.id);
+        if (na !== nb) return na ? 1 : -1;
+      }
       const ka = key(a);
       const kb = key(b);
       const c = ka < kb ? -1 : ka > kb ? 1 : a.title.localeCompare(b.title);
@@ -107,6 +118,14 @@
 
   function setPersonColor(p: Person, color: string) {
     app.savePerson({ ...p, color });
+  }
+
+  // Empty saves 0, which means "use the team default". Invalid input reverts
+  // to the saved value rather than being sent.
+  function setPersonHours(p: Person, el: HTMLInputElement) {
+    const h = Number(el.value || 0);
+    if (h >= 0 && h <= 24) app.savePerson({ ...p, hoursPerDay: h });
+    else el.value = p.hoursPerDay ? String(p.hoursPerDay) : '';
   }
 
   async function deletePerson(id: string) {
@@ -212,6 +231,19 @@
             {p.name}
             <span class="n">{app.tasks.filter((t) => t.assignees.includes(p.id) && t.status !== 'done').length}</span>
           </button>
+          <input
+            class="hpd"
+            type="number"
+            min="0"
+            max="24"
+            step="0.5"
+            value={p.hoursPerDay || ''}
+            placeholder={String(app.planning.hoursPerDay)}
+            disabled={!app.canEdit}
+            title="Hours per working day; empty uses the team default"
+            aria-label="Hours per day for {p.name}"
+            onchange={(e) => setPersonHours(p, e.currentTarget)}
+          />
           {#if app.canEdit}
             <button
               class="ghost rm"
@@ -291,12 +323,14 @@
               {@render th('start', 'Start')}
               {@render th('end', 'End')}
               {@render th('estimate', 'Est.', 'num')}
+              {@render th('pressure', 'Pressure', 'num')}
               <th class="num">Deps</th>
             </tr>
           </thead>
           <tbody>
             {#each rows as t (t.id)}
               {@const p = app.projectById.get(t.projectId)}
+              {@const pr = pressure.get(t.id)}
               <tr class:sel={ui.selectedTask === t.id} class:done={t.status === 'done'} onclick={() => (ui.selectedTask = t.id)}>
                 <td class="w-title"><span class="dot" style:background={p?.color}></span>{t.title}</td>
                 {#if !selected}<td class="muted">{p?.name}</td>{/if}
@@ -319,10 +353,11 @@
                 <td class="date">{formatShort(t.start)}</td>
                 <td class="date" class:overdue={overdue(t)}>{formatShort(t.end)}</td>
                 <td class="num">{t.estimateHours ? `${t.estimateHours}h` : ''}</td>
+                <td class="num level-{pr?.level}" title={pr ? pressureLabel(pr) : ''}>{pr ? fmtRatio(pr) : ''}</td>
                 <td class="num muted">{t.dependsOn.length || ''}</td>
               </tr>
             {:else}
-              <tr><td colspan="8" class="muted none">No tasks match.</td></tr>
+              <tr><td colspan="9" class="muted none">No tasks match.</td></tr>
             {/each}
           </tbody>
         </table>
@@ -463,6 +498,23 @@
     inset: 0;
     opacity: 0;
     cursor: pointer;
+  }
+
+  /* Hours per day per person; compact so names keep their room. */
+  .hpd {
+    width: 44px;
+    flex: none;
+    padding: 2px 4px;
+    font-size: 12px;
+    text-align: right;
+  }
+
+  .level-tight {
+    color: var(--warn);
+  }
+
+  .level-over {
+    color: var(--danger);
   }
 
   .chip.plain .dot {

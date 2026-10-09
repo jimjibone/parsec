@@ -14,6 +14,7 @@ interface Persisted {
   hidden: string[];
   trackerProject: string;
   highlight: string;
+  showPressure: boolean;
 }
 
 /** Timeline highlight value meaning "tasks with no assignee". */
@@ -34,6 +35,7 @@ class UiState {
   hidden = $state<string[]>([]);
   trackerProject = $state(''); // '' = all projects
   highlight = $state(''); // timeline: '' = everyone, UNASSIGNED, or a person id
+  showPressure = $state(true); // timeline pressure strips and drag readout
   selectedTask = $state<string | null>(null);
   gitOpen = $state(false);
   settingsOpen = $state(false);
@@ -46,6 +48,7 @@ class UiState {
     if (Array.isArray(p.hidden)) this.hidden = p.hidden;
     if (typeof p.trackerProject === 'string') this.trackerProject = p.trackerProject;
     if (typeof p.highlight === 'string') this.highlight = p.highlight;
+    if (typeof p.showPressure === 'boolean') this.showPressure = p.showPressure;
   }
 
   persist() {
@@ -56,6 +59,7 @@ class UiState {
       hidden: this.hidden,
       trackerProject: this.trackerProject,
       highlight: this.highlight,
+      showPressure: this.showPressure,
     };
     try {
       localStorage.setItem(KEY, JSON.stringify(p));

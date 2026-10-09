@@ -166,6 +166,20 @@ func (s *Server) Handler() http.Handler {
 		respond(w)(changed(ts, err))
 	}))
 
+	// Team capacity settings for task pressure; read via /api/state.
+	mux.HandleFunc("PUT /api/planning", s.mutating("Edit planning", func(w http.ResponseWriter, r *http.Request) {
+		var p store.Planning
+		if !readJSON(w, r, &p) {
+			return
+		}
+		if s.conflict(w, r, "planning", p.Version, s.store.PlanningVersion(), "Planning settings") {
+			return
+		}
+		p, err := s.store.UpdatePlanning(p)
+		s.touched(r, err, "planning")
+		respond(w)(p, err)
+	}))
+
 	// Git: anyone can look; only admins act. With automatic commits the
 	// status also reports the last automatic failure.
 	mux.HandleFunc("GET /api/git/status", s.require(auth.RoleViewer, s.locked(func(w http.ResponseWriter, r *http.Request) {

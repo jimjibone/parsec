@@ -4,6 +4,7 @@
   import Icon from './Icon.svelte';
   import { spanDays, toDay, toISO } from './dates';
   import { normalizeSpan, shiftSpan, workDays, type Span } from './schedule';
+  import { fmtDays, fmtHours, fmtRatio } from './pressure';
   import { STATUSES, type Task } from './types';
 
   let { taskId }: { taskId: string } = $props();
@@ -42,6 +43,7 @@
   }
 
   const duration = $derived(workDays(toDay(task.start), toDay(task.end), task.weekendWork));
+  const pressure = $derived(app.pressureOf(task));
 
   function addAssignee(id: string) {
     if (id === '__new') {
@@ -203,6 +205,21 @@
           {/if}
         </div>
       </div>
+      {#if pressure}
+        {@const n = pressure.assumed ? 1 : task.assignees.length}
+        <div class="field wide">
+          <span>Pressure</span>
+          <div class="static">
+            <span class="level-{pressure.level}">
+              {fmtRatio(pressure)}: needs {fmtDays(pressure.neededDays)}, has {pressure.days}
+            </span>
+            <span class="muted cal">({n} {n === 1 ? 'person' : 'people'}, {fmtHours(pressure.dailyHours)}/day)</span>
+            {#if pressure.assumed}
+              <div class="muted cal">Unassigned, so one person at the team default is assumed.</div>
+            {/if}
+          </div>
+        </div>
+      {/if}
       <label class="switch">
         <input type="checkbox" checked={task.weekendWork} onchange={(e) => setWeekendWork(e.currentTarget.checked)} />
         <span>Works weekends</span>
@@ -455,6 +472,18 @@
 
   .cal {
     font-size: 12px;
+  }
+
+  .wide {
+    grid-column: 1 / -1;
+  }
+
+  .level-tight {
+    color: var(--warn);
+  }
+
+  .level-over {
+    color: var(--danger);
   }
 
   .confirm {

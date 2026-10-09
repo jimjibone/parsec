@@ -42,6 +42,21 @@ come from git.
   task.
 - Task panel: title, status, project, dates, estimate (hours), assignees,
   dependencies, description.
+- Task pressure: a task's estimate divided by the working hours its bar
+  allows (working days x team hours per day). From 80% a thin amber strip
+  shows along the bottom of the bar, and over 100% it turns red with a notch.
+  It updates live while a bar is dragged, with a readout above it, and shows
+  in the bar's tooltip, the task panel and a sortable table column. The
+  Pressure button in the timeline toolbar hides the strips and readout in
+  this browser; the tooltip, panel and table keep showing it. Done
+  tasks and tasks without an estimate show nothing. Capacity is set in the
+  settings panel (user menu > Settings, or the sliders button at the
+  right of the header in single-user mode): team hours per day
+  (default 6) and how much each extra assignee adds (default 100%, an even
+  split). Each person can have their own hours per day in the people list
+  of the Projects & tasks view. Unassigned tasks assume one person. The
+  team settings live in `planning.yaml` in the data repository, written on
+  first change.
 - Projects & tasks view: sortable, filterable task table, project editor
   (name, colour, description, milestones), people list.
 - Git panel: changed files, commit, pull (rebase), push, sync, remote URL,
@@ -129,7 +144,7 @@ used from any browser. Nothing is installed on users' machines.
 | No access | sign in, nothing else                                               |
 | Viewer    | see everything; the timeline and task panel are read-only           |
 | Editor    | edit projects, tasks, people and milestones; undo their own changes |
-| Admin     | editor, plus the git panel and the settings panel                   |
+| Admin     | editor, plus the git panel and people and access settings           |
 
 Admins listed in the config file cannot be demoted or removed in the app.
 
@@ -181,7 +196,7 @@ the user has a public email address; without it, commits use
 make dev-server   # Go API on :7343, data in ./parsec-data
 make dev-web      # Vite on :5173, proxies /api to :7343
 make check        # go vet + svelte-check
-make test         # Go tests
+make test         # Go tests + web unit tests (vitest)
 ```
 
 ## Data layout
