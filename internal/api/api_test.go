@@ -371,6 +371,57 @@ func TestSharedServer(t *testing.T) {
 	}
 }
 
+func TestPlanning(t *testing.T) {
+	e := newEnv(t)
+	alice := e.signIn("alice", "Alice Example", "tab-a")
+	bob := e.signIn("bob", "Bob Sample", "tab-b")
+
+	var snap store.Snapshot
+	bob.do("GET", "/api/state", nil, &snap)
+	if snap.Planning.HoursPerDay != 6 || snap.Planning.AssigneeFactor != 1 || snap.Planning.Version == "" {
+		t.Fatalf("default planning = %+v", snap.Planning)
+	}
+	stale := snap.Planning
+
+	// Viewers cannot change it.
+	if c := bob.do("PUT", "/api/planning", store.Planning{HoursPerDay: 5, AssigneeFactor: 1, Version: stale.Version}, nil); c != 403 {
+		t.Fatalf("viewer edit = %d", c)
+	}
+
+	var saved store.Planning
+	if c := alice.do("PUT", "/api/planning", store.Planning{HoursPerDay: 7, AssigneeFactor: 0.5, Version: stale.Version}, &saved); c != 200 ||
+		saved.HoursPerDay != 7 || saved.AssigneeFactor != 0.5 || saved.Version == stale.Version {
+		t.Fatalf("edit = %d %+v", c, saved)
+	}
+	if c := alice.do("PUT", "/api/planning", store.Planning{HoursPerDay: 0, AssigneeFactor: 1, Version: saved.Version}, nil); c != 400 {
+		t.Fatalf("invalid edit = %d", c)
+	}
+
+	// Bob, now an editor, saves over the version he loaded before Alice's edit.
+	if c := alice.do("PUT", "/api/users/bob", auth.Update{Role: "editor"}, nil); c != 200 {
+		t.Fatalf("promote = %d", c)
+	}
+	var cerr struct {
+		Error    string `json:"error"`
+		Conflict bool   `json:"conflict"`
+	}
+	if c := bob.do("PUT", "/api/planning", store.Planning{HoursPerDay: 5, AssigneeFactor: 1, Version: stale.Version}, &cerr); c != 409 ||
+		!cerr.Conflict || !strings.Contains(cerr.Error, "Alice Example") {
+		t.Fatalf("conflict = %d %+v", c, cerr)
+	}
+
+	// planning.yaml is committed automatically under the editor's name.
+	e.srv.Shutdown()
+	if log := gitLog(t, e.data); !strings.Contains(log, "Alice Example <alice@example.com>|Edit planning") {
+		t.Fatalf("git log:\n%s", log)
+	}
+	cmd := exec.Command("git", "show", "--name-only", "--format=", "HEAD")
+	cmd.Dir = e.data
+	if out, err := cmd.CombinedOutput(); err != nil || strings.TrimSpace(string(out)) != "planning.yaml" {
+		t.Fatalf("committed files: %v %s", err, out)
+	}
+}
+
 func TestEventsStream(t *testing.T) {
 	e := newEnv(t)
 	alice := e.signIn("alice", "Alice Example", "tab-a")
