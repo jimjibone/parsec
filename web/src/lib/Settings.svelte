@@ -11,10 +11,12 @@
     { id: 'none', label: 'No access', hint: 'Can sign in but sees nothing' },
     { id: 'viewer', label: 'Viewer', hint: 'Sees everything, changes nothing' },
     { id: 'editor', label: 'Editor', hint: 'Edits projects, tasks and people' },
-    { id: 'admin', label: 'Admin', hint: 'Editor, plus git and this panel' },
+    { id: 'admin', label: 'Admin', hint: 'Editor, plus git and people and access' },
   ];
 
   const local = $derived(app.me?.auth.mode === 'local');
+  /** People and access exists only in shared mode, for admins. */
+  const admin = $derived(app.shared && app.isAdmin);
   const me = $derived(app.me?.user?.username ?? '');
 
   let users = $state<User[]>([]);
@@ -36,7 +38,22 @@
     }
   }
 
-  onMount(refresh);
+  onMount(() => {
+    if (admin) refresh();
+  });
+
+  // Capacity: invalid input reverts to the saved value rather than being sent.
+  function setPlanningHours(el: HTMLInputElement) {
+    const h = Number(el.value);
+    if (el.value !== '' && h > 0 && h <= 24) app.savePlanning({ ...app.planning, hoursPerDay: h });
+    else el.value = String(app.planning.hoursPerDay);
+  }
+
+  function setAssigneeFactor(el: HTMLInputElement) {
+    const pct = Number(el.value);
+    if (el.value !== '' && pct >= 0 && pct <= 100) app.savePlanning({ ...app.planning, assigneeFactor: pct / 100 });
+    else el.value = String(Math.round(app.planning.assigneeFactor * 100));
+  }
 
   function fail(e: unknown) {
     error = e instanceof ApiError ? e.message : String(e);
@@ -97,104 +114,142 @@
 <div class="backdrop" onclick={() => (ui.settingsOpen = false)} role="presentation"></div>
 <aside class="panel" aria-label="Settings">
   <div class="head">
-    <h2>People and access</h2>
+    <h2>Settings</h2>
     <button class="ghost icon-btn" onclick={() => (ui.settingsOpen = false)} aria-label="Close"><Icon name="x" /></button>
   </div>
 
   <section>
+    <h3>Capacity</h3>
     <label class="field inline">
-      <span>{local ? 'Role for new accounts' : 'Role on first sign-in'}</span>
-      <select value={settings.defaultRole} onchange={(e) => setDefault(e.currentTarget.value as Role)}>
-        {#each ROLES.filter((r) => r.id !== 'admin') as r (r.id)}<option value={r.id}>{r.label}</option>{/each}
-      </select>
+      <span>Hours per day</span>
+      <input
+        class="num"
+        type="number"
+        min="0.5"
+        max="24"
+        step="0.5"
+        value={app.planning.hoursPerDay}
+        disabled={!app.canEdit}
+        onchange={(e) => setPlanningHours(e.currentTarget)}
+      />
     </label>
-    {#if !local}
-      <p class="muted small">
-        People appear here after their first sign-in. Add a username below to set someone's role before they sign in.
-      </p>
-    {/if}
+    <label class="field inline">
+      <span>Each extra assignee adds</span>
+      <input
+        class="num"
+        type="number"
+        min="0"
+        max="100"
+        step="5"
+        value={Math.round(app.planning.assigneeFactor * 100)}
+        disabled={!app.canEdit}
+        onchange={(e) => setAssigneeFactor(e.currentTarget)}
+      />%
+    </label>
+    <p class="muted small">
+      Used for task pressure. 100% = work splits evenly between assignees. People can have their own hours per day in the people list.
+      Shared with the team through planning.yaml in the data repository.
+    </p>
   </section>
 
-  {#if error}<p class="error">{error}</p>{/if}
+  {#if admin}
+    <h2>People and access</h2>
 
-  <section>
-    <table>
-      <thead>
-        <tr><th>Person</th><th>Role</th><th>Last seen</th><th></th></tr>
-      </thead>
-      <tbody>
-        {#each users as u (u.username)}
-          <tr>
-            <td>
-              <div class="who">
-                <b>{u.name || u.username}</b>
-                <span class="muted small">{u.username}{u.email ? ` - ${u.email}` : ''}</span>
-              </div>
-            </td>
-            <td>
-              <select
-                value={u.role}
-                disabled={u.fixed || u.username === me}
-                title={u.fixed ? 'Admin in the server config file' : u.username === me ? 'Your own role' : ''}
-                onchange={(e) => setRole(u, e.currentTarget.value as Role)}
-              >
-                {#each ROLES as r (r.id)}<option value={r.id} title={r.hint}>{r.label}</option>{/each}
-              </select>
-            </td>
-            <td class="muted small">{seen(u.lastSeen)}</td>
-            <td class="acts">
-              {#if local}
-                {#if pwFor === u.username}
-                  <form
-                    class="pw"
-                    onsubmit={(e) => {
-                      e.preventDefault();
-                      savePassword(u);
-                    }}
-                  >
-                    <!-- svelte-ignore a11y_autofocus -->
-                    <input type="password" bind:value={pwDraft} placeholder="New password" autocomplete="new-password" autofocus />
-                    <button type="submit">Set</button>
-                    <button type="button" class="ghost" onclick={() => (pwFor = null)}>Cancel</button>
-                  </form>
-                {:else}
-                  <button class="ghost" onclick={() => (pwFor = u.username)}>{u.hasPassword ? 'Reset password' : 'Set password'}</button>
-                {/if}
-              {/if}
-              {#if !u.fixed && u.username !== me}
-                <button
-                  class="ghost icon-btn"
-                  class:danger={confirmRemove.is(u.username)}
-                  onclick={() => remove(u)}
-                  onblur={() => confirmRemove.reset()}
-                  title={confirmRemove.is(u.username) ? 'Click again to remove' : 'Remove'}><Icon name="trash" size={14} /></button
-                >
-              {/if}
-            </td>
-          </tr>
-        {/each}
-      </tbody>
-    </table>
-  </section>
-
-  <section>
-    <h3>{local ? 'Add an account' : 'Add someone before they sign in'}</h3>
-    <form class="add" onsubmit={add}>
-      <input type="text" bind:value={draft.username} placeholder={local ? 'Username' : 'GitLab username'} required />
-      <input type="text" bind:value={draft.name} placeholder="Display name (optional)" />
-      {#if local}
-        <input type="password" bind:value={draft.password} placeholder="Password (8+ characters)" autocomplete="new-password" required />
+    <section>
+      <label class="field inline">
+        <span>{local ? 'Role for new accounts' : 'Role on first sign-in'}</span>
+        <select value={settings.defaultRole} onchange={(e) => setDefault(e.currentTarget.value as Role)}>
+          {#each ROLES.filter((r) => r.id !== 'admin') as r (r.id)}<option value={r.id}>{r.label}</option>{/each}
+        </select>
+      </label>
+      {#if !local}
+        <p class="muted small">
+          People appear here after their first sign-in. Add a username below to set someone's role before they sign in.
+        </p>
       {/if}
-      <select bind:value={draft.role}>
-        {#each ROLES as r (r.id)}<option value={r.id}>{r.label}</option>{/each}
-      </select>
-      <button class="primary" type="submit"><Icon name="plus" /> Add</button>
-    </form>
-  </section>
+    </section>
 
-  <p class="muted small">
-    {#each ROLES as r, i (r.id)}<b>{r.label}</b>: {r.hint.toLowerCase()}{i < ROLES.length - 1 ? '. ' : '.'}{/each}
-  </p>
+    {#if error}<p class="error">{error}</p>{/if}
+
+    <section>
+      <table>
+        <thead>
+          <tr><th>Person</th><th>Role</th><th>Last seen</th><th></th></tr>
+        </thead>
+        <tbody>
+          {#each users as u (u.username)}
+            <tr>
+              <td>
+                <div class="who">
+                  <b>{u.name || u.username}</b>
+                  <span class="muted small">{u.username}{u.email ? ` - ${u.email}` : ''}</span>
+                </div>
+              </td>
+              <td>
+                <select
+                  value={u.role}
+                  disabled={u.fixed || u.username === me}
+                  title={u.fixed ? 'Admin in the server config file' : u.username === me ? 'Your own role' : ''}
+                  onchange={(e) => setRole(u, e.currentTarget.value as Role)}
+                >
+                  {#each ROLES as r (r.id)}<option value={r.id} title={r.hint}>{r.label}</option>{/each}
+                </select>
+              </td>
+              <td class="muted small">{seen(u.lastSeen)}</td>
+              <td class="acts">
+                {#if local}
+                  {#if pwFor === u.username}
+                    <form
+                      class="pw"
+                      onsubmit={(e) => {
+                        e.preventDefault();
+                        savePassword(u);
+                      }}
+                    >
+                      <!-- svelte-ignore a11y_autofocus -->
+                      <input type="password" bind:value={pwDraft} placeholder="New password" autocomplete="new-password" autofocus />
+                      <button type="submit">Set</button>
+                      <button type="button" class="ghost" onclick={() => (pwFor = null)}>Cancel</button>
+                    </form>
+                  {:else}
+                    <button class="ghost" onclick={() => (pwFor = u.username)}>{u.hasPassword ? 'Reset password' : 'Set password'}</button>
+                  {/if}
+                {/if}
+                {#if !u.fixed && u.username !== me}
+                  <button
+                    class="ghost icon-btn"
+                    class:danger={confirmRemove.is(u.username)}
+                    onclick={() => remove(u)}
+                    onblur={() => confirmRemove.reset()}
+                    title={confirmRemove.is(u.username) ? 'Click again to remove' : 'Remove'}><Icon name="trash" size={14} /></button
+                  >
+                {/if}
+              </td>
+            </tr>
+          {/each}
+        </tbody>
+      </table>
+    </section>
+
+    <section>
+      <h3>{local ? 'Add an account' : 'Add someone before they sign in'}</h3>
+      <form class="add" onsubmit={add}>
+        <input type="text" bind:value={draft.username} placeholder={local ? 'Username' : 'GitLab username'} required />
+        <input type="text" bind:value={draft.name} placeholder="Display name (optional)" />
+        {#if local}
+          <input type="password" bind:value={draft.password} placeholder="Password (8+ characters)" autocomplete="new-password" required />
+        {/if}
+        <select bind:value={draft.role}>
+          {#each ROLES as r (r.id)}<option value={r.id}>{r.label}</option>{/each}
+        </select>
+        <button class="primary" type="submit"><Icon name="plus" /> Add</button>
+      </form>
+    </section>
+
+    <p class="muted small">
+      {#each ROLES as r, i (r.id)}<b>{r.label}</b>: {r.hint.toLowerCase()}{i < ROLES.length - 1 ? '. ' : '.'}{/each}
+    </p>
+  {/if}
 </aside>
 
 <style>
@@ -248,6 +303,11 @@
     flex-direction: row;
     align-items: center;
     gap: 10px;
+  }
+
+  .num {
+    width: 64px;
+    text-align: right;
   }
 
   table {

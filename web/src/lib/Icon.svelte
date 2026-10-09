@@ -19,6 +19,7 @@
     diamond: 'M12 2l10 10-10 10L2 12z',
     undo: 'M9 14L4 9l5-5M4 9h10.5a5.5 5.5 0 010 11H11',
     redo: 'M15 14l5-5-5-5M20 9H9.5a5.5 5.5 0 000 11H13',
+    sliders: 'M4 21v-7M4 10V3M12 21v-9M12 8V3M20 21v-5M20 12V3M1 14h6M9 8h6M17 16h6',
   } as const;
   export type IconName = keyof typeof PATHS;
 </script>

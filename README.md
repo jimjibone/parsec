@@ -47,10 +47,12 @@ come from git.
   shows along the bottom of the bar, and over 100% it turns red with a notch.
   It updates live while a bar is dragged, with a readout above it, and shows
   in the bar's tooltip, the task panel and a sortable table column. Done
-  tasks and tasks without an estimate show nothing. Capacity is set under
-  People in the Projects & tasks view: team hours per day (default 6), how
-  much each extra assignee adds (default 100%, an even split), and optional
-  hours per day for each person. Unassigned tasks assume one person. The
+  tasks and tasks without an estimate show nothing. Capacity is set in the
+  settings panel (user menu > Settings, or the sliders button at the
+  right of the header in single-user mode): team hours per day
+  (default 6) and how much each extra assignee adds (default 100%, an even
+  split). Each person can have their own hours per day in the people list
+  of the Projects & tasks view. Unassigned tasks assume one person. The
   team settings live in `planning.yaml` in the data repository, written on
   first change.
 - Projects & tasks view: sortable, filterable task table, project editor
@@ -140,7 +142,7 @@ used from any browser. Nothing is installed on users' machines.
 | No access | sign in, nothing else                                               |
 | Viewer    | see everything; the timeline and task panel are read-only           |
 | Editor    | edit projects, tasks, people and milestones; undo their own changes |
-| Admin     | editor, plus the git panel and the settings panel                   |
+| Admin     | editor, plus the git panel and people and access settings           |
 
 Admins listed in the config file cannot be demoted or removed in the app.
 

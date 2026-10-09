@@ -165,13 +165,22 @@
                 <strong>{user.name || user.username}</strong>
                 <span class="muted">{user.username} - {app.role}</span>
               </div>
-              {#if app.isAdmin}
-                <button class="ghost" onclick={() => (ui.settingsOpen = true)}>Settings: people and access</button>
-              {/if}
+              <button class="ghost" onclick={() => (ui.settingsOpen = true)}>Settings</button>
               <button class="ghost" onclick={() => app.logout()}>Sign out</button>
             </div>
           {/if}
         </div>
+      {:else}
+        <!-- Single-user mode has no user menu; settings sit in its place. -->
+        <button
+          class="icon-btn"
+          class:open={ui.settingsOpen}
+          onclick={() => (ui.settingsOpen = !ui.settingsOpen)}
+          title="Settings"
+          aria-label="Settings"
+        >
+          <Icon name="sliders" />
+        </button>
       {/if}
     </header>
 
@@ -198,7 +207,7 @@
       <GitPanel />
     {/if}
 
-    {#if ui.settingsOpen && app.isAdmin}
+    {#if ui.settingsOpen}
       <Settings />
     {/if}
   </div>

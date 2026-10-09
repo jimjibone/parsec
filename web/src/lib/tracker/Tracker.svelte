@@ -128,18 +128,6 @@
     else el.value = p.hoursPerDay ? String(p.hoursPerDay) : '';
   }
 
-  function setPlanningHours(el: HTMLInputElement) {
-    const h = Number(el.value);
-    if (el.value !== '' && h > 0 && h <= 24) app.savePlanning({ ...app.planning, hoursPerDay: h });
-    else el.value = String(app.planning.hoursPerDay);
-  }
-
-  function setAssigneeFactor(el: HTMLInputElement) {
-    const pct = Number(el.value);
-    if (el.value !== '' && pct >= 0 && pct <= 100) app.savePlanning({ ...app.planning, assigneeFactor: pct / 100 });
-    else el.value = String(Math.round(app.planning.assigneeFactor * 100));
-  }
-
   async function deletePerson(id: string) {
     if (!confirmRemove.hit(id)) return;
     if (assigneeFilter === id) assigneeFilter = '';
@@ -284,37 +272,6 @@
         onblur={createPerson}
       />
     {/if}
-
-    <div class="side-head people-head">
-      <h3>Capacity</h3>
-    </div>
-    <label class="cap">
-      <span>Hours per day</span>
-      <input
-        type="number"
-        min="0.5"
-        max="24"
-        step="0.5"
-        value={app.planning.hoursPerDay}
-        disabled={!app.canEdit}
-        onchange={(e) => setPlanningHours(e.currentTarget)}
-      />
-    </label>
-    <label class="cap">
-      <span>Each extra assignee adds</span>
-      <span class="pct">
-        <input
-          type="number"
-          min="0"
-          max="100"
-          step="5"
-          value={Math.round(app.planning.assigneeFactor * 100)}
-          disabled={!app.canEdit}
-          onchange={(e) => setAssigneeFactor(e.currentTarget)}
-        />%
-      </span>
-    </label>
-    <p class="hint muted">Used for task pressure. 100% = work splits evenly between assignees.</p>
   </nav>
 
   <div class="main">
@@ -550,35 +507,6 @@
     padding: 2px 4px;
     font-size: 12px;
     text-align: right;
-  }
-
-  .cap {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 8px;
-    padding: 2px 4px 2px 8px;
-    font-size: 13px;
-  }
-
-  .cap input {
-    width: 56px;
-    padding: 2px 4px;
-    font-size: 12px;
-    text-align: right;
-  }
-
-  .pct {
-    display: flex;
-    align-items: center;
-    gap: 2px;
-    font-size: 12px;
-    color: var(--text-2);
-  }
-
-  .hint {
-    margin: 4px 4px 0 8px;
-    font-size: 12px;
   }
 
   .level-tight {
