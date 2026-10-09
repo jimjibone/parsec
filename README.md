@@ -46,7 +46,9 @@ come from git.
   allows (working days x team hours per day). From 80% a thin amber strip
   shows along the bottom of the bar, and over 100% it turns red with a notch.
   It updates live while a bar is dragged, with a readout above it, and shows
-  in the bar's tooltip, the task panel and a sortable table column. Done
+  in the bar's tooltip, the task panel and a sortable table column. The
+  Pressure button in the timeline toolbar hides the strips and readout in
+  this browser; the tooltip, panel and table keep showing it. Done
   tasks and tasks without an estimate show nothing. Capacity is set in the
   settings panel (user menu > Settings, or the sliders button at the
   right of the header in single-user mode): team hours per day

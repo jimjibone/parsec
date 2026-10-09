@@ -687,6 +687,13 @@
     </div>
     <button class="ghost" onclick={() => (ui.collapsed = [])}>Expand all</button>
     <button class="ghost" onclick={() => (ui.collapsed = app.projects.map((p) => p.id))}>Collapse all</button>
+    <button
+      class="ghost"
+      class:on={ui.showPressure}
+      aria-pressed={ui.showPressure}
+      onclick={() => (ui.showPressure = !ui.showPressure)}
+      title="Show task pressure strips on bars and while dragging (this browser only)">Pressure</button
+    >
     <div class="highlight" class:active={!!highlight}>
       {#if highlight && highlight !== UNASSIGNED}
         <span class="dot" style:background={app.colorOf(highlight)}></span>
@@ -1031,7 +1038,7 @@
                     style:--wk="{2 * dw}px"
                   ></div>
                 {/if}
-                {#if pr && pr.level !== 'ok'}
+                {#if ui.showPressure && pr && pr.level !== 'ok'}
                   <div class="pressure {pr.level}" style:width="{Math.min(pr.ratio, 1) * 100}%"></div>
                 {/if}
                 {#if app.canEdit}
@@ -1066,7 +1073,7 @@
                   <span class="ot">{t.title}</span>
                 </span>
               {/if}
-              {#if pr && drag?.id === t.id && drag.moved}
+              {#if ui.showPressure && pr && drag?.id === t.id && drag.moved}
                 <span class="pressure-readout {pr.level}" style:left="{g.x}px" style:top="{g.y}px">{pressureLabel(pr)}</span>
               {/if}
             {/if}
@@ -1120,6 +1127,11 @@
     border-color: var(--accent);
     color: var(--accent);
     position: relative;
+  }
+
+  /* Toggle button, on. */
+  .toolbar .on {
+    color: var(--accent);
   }
 
   .spacer {
