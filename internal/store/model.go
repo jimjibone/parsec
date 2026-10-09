@@ -44,10 +44,28 @@ type Task struct {
 // Person can be assigned to tasks. Color is optional (#rrggbb); clients
 // derive a stable default from the ID when it is empty.
 type Person struct {
-	ID      string `yaml:"id" json:"id"`
-	Name    string `yaml:"name" json:"name"`
-	Color   string `yaml:"color,omitempty" json:"color"`
-	Version string `yaml:"-" json:"version"`
+	ID    string `yaml:"id" json:"id"`
+	Name  string `yaml:"name" json:"name"`
+	Color string `yaml:"color,omitempty" json:"color"`
+	// HoursPerDay overrides Planning.HoursPerDay for this person; 0 means
+	// use the team default.
+	HoursPerDay float64 `yaml:"hoursPerDay,omitempty" json:"hoursPerDay"`
+	Version     string  `yaml:"-" json:"version"`
+}
+
+// Planning holds team-wide capacity settings used for task pressure.
+type Planning struct {
+	// HoursPerDay is the focused hours one person gives a task per working day.
+	HoursPerDay float64 `yaml:"hoursPerDay" json:"hoursPerDay"`
+	// AssigneeFactor is how much each assignee after the first adds (0..1);
+	// 1 means work splits evenly, lower values allow for coordination overhead.
+	AssigneeFactor float64 `yaml:"assigneeFactor" json:"assigneeFactor"`
+	Version        string  `yaml:"-" json:"version"`
+}
+
+// DefaultPlanning applies when planning.yaml is absent or leaves a field out.
+func DefaultPlanning() Planning {
+	return Planning{HoursPerDay: 6, AssigneeFactor: 1}
 }
 
 // Snapshot is the full database contents.
@@ -55,6 +73,7 @@ type Snapshot struct {
 	Projects []Project `json:"projects"`
 	Tasks    []Task    `json:"tasks"`
 	People   []Person  `json:"people"`
+	Planning Planning  `json:"planning"`
 }
 
 var validStatuses = map[string]bool{

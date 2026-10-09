@@ -143,6 +143,84 @@ func TestPersonColor(t *testing.T) {
 	}
 }
 
+func TestPersonHoursPerDay(t *testing.T) {
+	s, dir := mustOpen(t)
+	p, err := s.CreatePerson(Person{Name: "dave", HoursPerDay: 4.5})
+	if err != nil {
+		t.Fatal(err)
+	}
+	s2, err := Open(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := s2.Snapshot().People[0].HoursPerDay; got != 4.5 {
+		t.Fatalf("reloaded hoursPerDay = %v", got)
+	}
+	var ve *ValidationError
+	for _, h := range []float64{-1, 25} {
+		p.HoursPerDay = h
+		if _, err := s.UpdatePerson(p); !errors.As(err, &ve) {
+			t.Fatalf("hoursPerDay %v accepted: %v", h, err)
+		}
+	}
+}
+
+func TestPlanningDefaults(t *testing.T) {
+	s, dir := mustOpen(t)
+	if got := s.Snapshot().Planning; got.HoursPerDay != 6 || got.AssigneeFactor != 1 || got.Version == "" {
+		t.Fatalf("defaults = %+v", got)
+	}
+	if _, err := os.Stat(filepath.Join(dir, "planning.yaml")); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("planning.yaml written before any edit: %v", err)
+	}
+	// A partly written file keeps defaults for the missing keys.
+	if err := os.WriteFile(filepath.Join(dir, "planning.yaml"), []byte("hoursPerDay: 5\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.Reload(); err != nil {
+		t.Fatal(err)
+	}
+	if got := s.Snapshot().Planning; got.HoursPerDay != 5 || got.AssigneeFactor != 1 {
+		t.Fatalf("partial file = %+v", got)
+	}
+}
+
+func TestPlanningUpdate(t *testing.T) {
+	s, dir := mustOpen(t)
+	before := s.PlanningVersion()
+	got, err := s.UpdatePlanning(Planning{HoursPerDay: 7.5, AssigneeFactor: 0})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.Version == before || got.Version != s.PlanningVersion() {
+		t.Fatalf("version %q, before %q, now %q", got.Version, before, s.PlanningVersion())
+	}
+	s2, err := Open(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// An explicit factor of 0 is a real value, not "unset".
+	if p := s2.Snapshot().Planning; p.HoursPerDay != 7.5 || p.AssigneeFactor != 0 {
+		t.Fatalf("reloaded = %+v", p)
+	}
+
+	var ve *ValidationError
+	for _, bad := range []Planning{
+		{HoursPerDay: 0, AssigneeFactor: 1},
+		{HoursPerDay: -1, AssigneeFactor: 1},
+		{HoursPerDay: 25, AssigneeFactor: 1},
+		{HoursPerDay: 6, AssigneeFactor: -0.1},
+		{HoursPerDay: 6, AssigneeFactor: 1.5},
+	} {
+		if _, err := s.UpdatePlanning(bad); !errors.As(err, &ve) {
+			t.Fatalf("%+v accepted: %v", bad, err)
+		}
+	}
+	if p := s.Snapshot().Planning; p.HoursPerDay != 7.5 {
+		t.Fatalf("rejected update changed state: %+v", p)
+	}
+}
+
 func TestCycleRejected(t *testing.T) {
 	s, _ := mustOpen(t)
 	p, _ := s.CreateProject(Project{Name: "P"})

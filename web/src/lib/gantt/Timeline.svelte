@@ -22,6 +22,7 @@
   import { resizeEnd, resizeStart, shiftSpan } from '../schedule';
   import { barLayout, type BarLayout } from './barlayout';
   import { initials } from '../people';
+  import { fmtDays, fmtHours, fmtRatio, pressureLabel, SEP, type Pressure } from '../pressure';
   import type { Milestone, Project, Task } from '../types';
   import { STATUSES } from '../types';
 
@@ -155,6 +156,17 @@
         }
       }
       out.set(t.id, { x: (s - rangeStart) * dw, y, w: (e - s + 1) * dw, s, e });
+    }
+    return out;
+  });
+
+  /** Pressure per visible task, from geo so it follows a drag live. */
+  const pressure = $derived.by(() => {
+    const out = new Map<string, Pressure>();
+    for (const t of app.tasks) {
+      const g = geo.get(t.id);
+      const p = g && app.pressureOf(t, g.s, g.e);
+      if (p) out.set(t.id, p);
     }
     return out;
   });
@@ -638,7 +650,14 @@
       .map((a) => app.personById.get(a)?.name)
       .filter(Boolean)
       .join(', ');
-    return `${t.title}\n${formatShort(t.start)} - ${formatShort(t.end)} (${st})${who ? `\n${who}` : ''}`;
+    const pr = pressure.get(t.id);
+    return `${t.title}\n${formatShort(t.start)} - ${formatShort(t.end)} (${st})${who ? `\n${who}` : ''}${pr ? `\n${pressureLine(pr)}` : ''}`;
+  }
+
+  // e.g. "Pressure 111%, 40h over 3 working days (needs 4)", joined by SEP
+  function pressureLine(p: Pressure): string {
+    const assumed = p.assumed ? `${SEP}unassigned, assuming 1 person` : '';
+    return `Pressure ${fmtRatio(p)}${SEP}${fmtHours(p.estimate)} over ${fmtDays(p.days)} (needs ${p.neededDays})${assumed}`;
   }
 
   const names = (ids: string[]) => ids.map((a) => app.personById.get(a)?.name ?? a).join(', ');
@@ -985,6 +1004,7 @@
               {@const p = app.projectById.get(t.projectId)}
               {@const room = labelRoom.get(t.id) ?? Infinity}
               {@const lay = barLayout(g.w, t.title.length, t.assignees.length, room)}
+              {@const pr = pressure.get(t.id)}
               <div
                 class="bar {t.status}"
                 class:selected={ui.selectedTask === t.id}
@@ -1010,6 +1030,9 @@
                     style:background-position-x="{((5 - weekday(g.s) + 7) % 7) * dw}px"
                     style:--wk="{2 * dw}px"
                   ></div>
+                {/if}
+                {#if pr && pr.level !== 'ok'}
+                  <div class="pressure {pr.level}" style:width="{Math.min(pr.ratio, 1) * 100}%"></div>
                 {/if}
                 {#if app.canEdit}
                   <div class="handle l" onpointerdown={(e) => startDrag(e, t, 'start')} role="presentation"></div>
@@ -1042,6 +1065,9 @@
                   {#if !lay.pillsInside}{@render pills(t, lay)}{/if}
                   <span class="ot">{t.title}</span>
                 </span>
+              {/if}
+              {#if pr && drag?.id === t.id && drag.moved}
+                <span class="pressure-readout {pr.level}" style:left="{g.x}px" style:top="{g.y}px">{pressureLabel(pr)}</span>
               {/if}
             {/if}
           {/each}
@@ -1572,6 +1598,65 @@
     pointer-events: none;
     background-image: linear-gradient(90deg, color-mix(in srgb, var(--surface) 55%, transparent) 0 var(--wk), transparent var(--wk));
     background-repeat: repeat-x;
+  }
+
+  /* Task pressure along the bar's bottom edge; absolutely placed so it takes
+     no room from barlayout.ts. The light-then-dark top edge keeps it
+     readable on any project colour, even one close to amber or red. */
+  .pressure {
+    position: absolute;
+    left: 0;
+    bottom: 0;
+    height: 3px;
+    border-bottom-left-radius: 5px;
+    pointer-events: none;
+    background: var(--warn);
+    box-shadow:
+      0 -1px 0 rgba(255, 255, 255, 0.75),
+      0 -2px 0 rgba(0, 0, 0, 0.3);
+  }
+
+  .pressure.over {
+    border-bottom-right-radius: 5px;
+    background: var(--danger);
+  }
+
+  /* Notch at the right end so over-full reads apart from exactly full. */
+  .pressure.over::after {
+    content: '';
+    position: absolute;
+    right: 4px;
+    bottom: 0;
+    width: 4px;
+    height: 9px;
+    border-radius: 2px 2px 0 0;
+    background: var(--danger);
+    box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.75);
+  }
+
+  /* Live pressure while dragging, floating above the bar. */
+  .pressure-readout {
+    position: absolute;
+    z-index: 7;
+    transform: translateY(calc(-100% - 4px));
+    padding: 1px 6px;
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    background: var(--surface);
+    box-shadow: var(--shadow);
+    font-size: 11px;
+    font-weight: 600;
+    white-space: nowrap;
+    pointer-events: none;
+    color: var(--text-2);
+  }
+
+  .pressure-readout.tight {
+    color: var(--warn);
+  }
+
+  .pressure-readout.over {
+    color: var(--danger);
   }
 
   .label,

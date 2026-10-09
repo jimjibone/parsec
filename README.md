@@ -42,6 +42,17 @@ come from git.
   task.
 - Task panel: title, status, project, dates, estimate (hours), assignees,
   dependencies, description.
+- Task pressure: a task's estimate divided by the working hours its bar
+  allows (working days x team hours per day). From 80% a thin amber strip
+  shows along the bottom of the bar, and over 100% it turns red with a notch.
+  It updates live while a bar is dragged, with a readout above it, and shows
+  in the bar's tooltip, the task panel and a sortable table column. Done
+  tasks and tasks without an estimate show nothing. Capacity is set under
+  People in the Projects & tasks view: team hours per day (default 6), how
+  much each extra assignee adds (default 100%, an even split), and optional
+  hours per day for each person. Unassigned tasks assume one person. The
+  team settings live in `planning.yaml` in the data repository, written on
+  first change.
 - Projects & tasks view: sortable, filterable task table, project editor
   (name, colour, description, milestones), people list.
 - Git panel: changed files, commit, pull (rebase), push, sync, remote URL,

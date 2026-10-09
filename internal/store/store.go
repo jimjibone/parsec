@@ -2,6 +2,7 @@
 // (normally a git working tree). Layout:
 //
 //	people.yaml
+//	planning.yaml
 //	projects/<projectID>/project.yaml
 //	projects/<projectID>/tasks/<taskID>.yaml
 package store
@@ -48,6 +49,7 @@ type Store struct {
 	projects map[string]*Project
 	tasks    map[string]*Task
 	people   []Person
+	planning Planning
 }
 
 func Open(dir string) (*Store, error) {
@@ -65,6 +67,10 @@ func (s *Store) Reload() error {
 	var people []Person
 
 	if err := readYAML(filepath.Join(s.dir, "people.yaml"), &people); err != nil && !errors.Is(err, os.ErrNotExist) {
+		return err
+	}
+	planning, err := s.readPlanning()
+	if err != nil {
 		return err
 	}
 
@@ -108,9 +114,32 @@ func (s *Store) Reload() error {
 	}
 
 	s.mu.Lock()
-	s.projects, s.tasks, s.people = projects, tasks, people
+	s.projects, s.tasks, s.people, s.planning = projects, tasks, people, planning
 	s.mu.Unlock()
 	return nil
+}
+
+// readPlanning reads planning.yaml, filling absent keys with defaults. The
+// pointer fields tell an explicit assigneeFactor: 0 apart from a missing one.
+func (s *Store) readPlanning() (Planning, error) {
+	p := DefaultPlanning()
+	var raw struct {
+		HoursPerDay    *float64 `yaml:"hoursPerDay"`
+		AssigneeFactor *float64 `yaml:"assigneeFactor"`
+	}
+	if err := readYAML(s.planningPath(), &raw); err != nil {
+		if errors.Is(err, os.ErrNotExist) {
+			return p, nil
+		}
+		return p, err
+	}
+	if raw.HoursPerDay != nil && *raw.HoursPerDay > 0 {
+		p.HoursPerDay = *raw.HoursPerDay
+	}
+	if raw.AssigneeFactor != nil {
+		p.AssigneeFactor = *raw.AssigneeFactor
+	}
+	return p, nil
 }
 
 func (s *Store) Snapshot() Snapshot {
@@ -120,6 +149,7 @@ func (s *Store) Snapshot() Snapshot {
 		Projects: make([]Project, 0, len(s.projects)),
 		Tasks:    make([]Task, 0, len(s.tasks)),
 		People:   make([]Person, 0, len(s.people)),
+		Planning: normPlanning(s.planning),
 	}
 	for _, p := range s.people {
 		snap.People = append(snap.People, normPerson(p))
@@ -170,6 +200,11 @@ func normPerson(p Person) Person {
 	return p
 }
 
+func normPlanning(p Planning) Planning {
+	p.Version = version(p)
+	return p
+}
+
 // version hashes an entity's stored fields (plus any extra identity, such as
 // a task's project) into a short opaque string.
 func version(v any, extra ...string) string {
@@ -216,6 +251,12 @@ func (s *Store) PersonVersion(id string) (string, bool) {
 		return "", false
 	}
 	return normPerson(s.people[i]).Version, true
+}
+
+func (s *Store) PlanningVersion() string {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	return normPlanning(s.planning).Version
 }
 
 // ---- projects ----
@@ -548,6 +589,9 @@ func validatePerson(p *Person) error {
 	if p.Color != "" && !hexColor.MatchString(p.Color) {
 		return invalid("person colour must be #rrggbb, got %q", p.Color)
 	}
+	if p.HoursPerDay < 0 || p.HoursPerDay > 24 {
+		return invalid("hours per day must be between 0 and 24, got %v", p.HoursPerDay)
+	}
 	return nil
 }
 
@@ -613,7 +657,29 @@ func (s *Store) DeletePerson(id string) ([]Task, error) {
 	return changed, nil
 }
 
+// ---- planning ----
+
+// UpdatePlanning replaces the team planning settings. planning.yaml is only
+// written here, so a fresh data repo has none until someone edits them.
+func (s *Store) UpdatePlanning(p Planning) (Planning, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if p.HoursPerDay <= 0 || p.HoursPerDay > 24 {
+		return Planning{}, invalid("hours per day must be more than 0 and at most 24, got %v", p.HoursPerDay)
+	}
+	if p.AssigneeFactor < 0 || p.AssigneeFactor > 1 {
+		return Planning{}, invalid("assignee factor must be between 0 and 1, got %v", p.AssigneeFactor)
+	}
+	if err := writeYAML(s.planningPath(), p); err != nil {
+		return Planning{}, err
+	}
+	s.planning = p
+	return normPlanning(p), nil
+}
+
 // ---- files ----
+
+func (s *Store) planningPath() string { return filepath.Join(s.dir, "planning.yaml") }
 
 func (s *Store) projectDir(id string) string { return filepath.Join(s.dir, "projects", id) }
 
