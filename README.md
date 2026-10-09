@@ -93,6 +93,36 @@ Git operations use the system `git` binary, so existing SSH keys, credential
 helpers and commit signing settings apply. Interactive prompts are disabled;
 credentials must be available non-interactively.
 
+### Docker
+
+An image is published as `ghcr.io/jimjibone/parsec` (`latest` follows
+`main`; releases are tagged by version) for amd64 and arm64.
+[deploy/compose.yaml](deploy/compose.yaml) runs it with local passwords,
+data and accounts in named volumes, and
+[deploy/parsec.docker.yaml](deploy/parsec.docker.yaml) as the config:
+
+```sh
+cd deploy
+docker compose run --rm parsec --config /etc/parsec/parsec.yaml passwd alice admin
+docker compose up -d
+```
+
+Then open http://localhost:7343 and sign in. Add other people in the
+settings panel. Create the first admin before `up`: accounts are loaded at
+start, so `passwd` against a running server is overwritten by later edits
+in the app.
+
+- **Sync.** Set a remote in the git panel. For an SSH remote, mount a
+  directory with a deploy key and `known_hosts` at `/home/parsec/.ssh` (see
+  the compose file). The container runs as uid 10001.
+- **HTTPS.** Put a reverse proxy in front (see [Shared server](#shared-server))
+  and set `publicURL` in the config.
+- **GitLab sign-in.** Switch the config to `auth.mode: oidc` as in
+  [deploy/parsec.example.yaml](deploy/parsec.example.yaml) and pass
+  `PARSEC_OIDC_CLIENT_SECRET` in the environment.
+- **Build locally** with `docker build -t parsec .`, or uncomment `build: ..`
+  in the compose file.
+
 ## Shared server
 
 One parsec instance on an internal Linux host, behind an HTTPS reverse proxy,

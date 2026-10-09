@@ -1,0 +1,37 @@
+# Example Docker Compose setup: one parsec server with local passwords.
+#
+#   cd deploy
+#   docker compose run --rm parsec --config /etc/parsec/parsec.yaml passwd alice admin
+#   docker compose up -d
+#
+# Then open http://<host>:7343 and sign in. Put an HTTPS reverse proxy in
+# front (see Caddyfile / nginx.conf) and set publicURL before exposing it
+# beyond a trusted network.
+
+services:
+  parsec:
+    image: ghcr.io/jimjibone/parsec:latest
+    # Or build from this checkout:
+    # build: ..
+    restart: unless-stopped
+    ports:
+      - "7343:7343"
+    volumes:
+      - data:/data
+      - state:/state
+      - ./parsec.docker.yaml:/etc/parsec/parsec.yaml:ro
+      # To push to an SSH remote: a directory holding a deploy key (id_ed25519,
+      # mode 600, readable by uid 10001) and a known_hosts file for the host.
+      # - ./ssh:/home/parsec/.ssh:ro
+    environment:
+      # Shown as the committer; authors are the people who made the changes.
+      GIT_COMMITTER_NAME: parsec
+      GIT_COMMITTER_EMAIL: parsec@example.com
+      # For auth.mode: oidc, the client secret:
+      # PARSEC_OIDC_CLIENT_SECRET: ...
+    # Pending changes are committed (and pushed) on stop.
+    stop_grace_period: 60s
+
+volumes:
+  data:
+  state:

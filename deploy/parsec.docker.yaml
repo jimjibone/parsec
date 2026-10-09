@@ -1,0 +1,30 @@
+# parsec config for the container image (built in as /etc/parsec/parsec.yaml).
+# See parsec.example.yaml for every option. To change it, mount your own copy
+# over /etc/parsec/parsec.yaml, as compose.yaml does.
+
+# Listen on all interfaces inside the container; publish the port to choose
+# who can reach it.
+addr: 0.0.0.0:7343
+
+# Volumes. The data directory is created and `git init`ed if empty.
+data: /data
+stateDir: /state
+
+# Behind an HTTPS reverse proxy, set the address users open. It turns on
+# Secure cookies, and oidc needs it for the redirect URL.
+# publicURL: https://parsec.example.com
+
+auth:
+  # Usernames and passwords. Create the first admin before starting:
+  #   docker compose run --rm parsec --config /etc/parsec/parsec.yaml passwd alice admin
+  # Add everyone else in the app's settings panel.
+  mode: local
+
+  # Usernames that are always admins and cannot be demoted in the app.
+  # admins: [alice]
+
+git:
+  # Each person's changes are committed under their name once they stop
+  # editing for this long; with a remote set (git panel), parsec then pulls
+  # and pushes.
+  idle: 5m
