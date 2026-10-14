@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { flushSync, onMount } from 'svelte';
+  import { flushSync, onMount, untrack } from 'svelte';
   import { app } from '../state.svelte';
   import { ui, DAY_WIDTH, UNASSIGNED, type Zoom } from '../ui.svelte';
   import Icon from '../Icon.svelte';
@@ -94,8 +94,45 @@
     dy: number;
     moved: boolean;
     ww: boolean; // task works weekends
+    /** Set when moving a multi-selection: every task in it, by id. Dates only. */
+    group: Record<string, { s0: number; e0: number; ww: boolean; s: number; e: number }> | null;
   }
   let drag = $state<Drag | null>(null);
+
+  // ---- selection ----
+
+  /** Selected task ids. The task drawer opens only for a single selection. */
+  let sel = $state<string[]>([]);
+  const selSet = $derived(new Set(sel));
+
+  function select(ids: string[]) {
+    sel = ids;
+    ui.selectedTask = ids.length === 1 ? ids[0] : null;
+  }
+
+  // Follow selection changes made elsewhere (drawer links, closing the drawer).
+  $effect(() => {
+    const id = ui.selectedTask;
+    untrack(() => {
+      if (id) {
+        if (sel.length !== 1 || sel[0] !== id) sel = [id];
+      } else if (sel.length === 1) {
+        sel = [];
+      }
+    });
+  });
+
+  /** Shift-drag selection box, canvas coordinates. `base` is kept selected. */
+  interface Marquee {
+    x0: number;
+    y0: number;
+    x: number;
+    y: number;
+    base: string[];
+  }
+  let marquee = $state<Marquee | null>(null);
+
+  const isToggle = (ev: PointerEvent) => ev.metaKey || ev.ctrlKey || ev.shiftKey;
 
   interface LinkDrag {
     from: string;
@@ -146,7 +183,11 @@
       let s = toDay(t.start);
       let e = toDay(t.end);
       let y = row.top + PROJ_H + (app.displayLane.get(t.id) ?? 0) * LANE_H + BAR_PAD;
-      if (drag?.id === t.id) {
+      const member = drag?.group?.[t.id];
+      if (member) {
+        s = member.s;
+        e = member.e;
+      } else if (drag?.id === t.id) {
         s = drag.s;
         e = drag.e;
         if (drag.kind === 'move') {
@@ -367,13 +408,27 @@
     if (ev.button !== 0) return;
     ev.stopPropagation();
     ev.preventDefault();
+    if (isToggle(ev)) {
+      select(selSet.has(t.id) ? sel.filter((x) => x !== t.id) : [...sel, t.id]);
+      return;
+    }
     if (!app.canEdit) {
-      ui.selectedTask = t.id; // viewers can open the task, read-only
+      select([t.id]); // viewers can open the task, read-only
       return;
     }
     const g = geo.get(t.id);
     if (!g) return;
+    let group: Drag['group'] = null;
+    if (kind === 'move' && sel.length > 1 && selSet.has(t.id)) {
+      group = {};
+      for (const id of sel) {
+        const gg = geo.get(id);
+        const tt = app.taskById.get(id);
+        if (gg && tt) group[id] = { s0: gg.s, e0: gg.e, ww: tt.weekendWork, s: gg.s, e: gg.e };
+      }
+    }
     drag = {
+      group,
       kind,
       id: t.id,
       px: ev.clientX,
@@ -409,6 +464,13 @@
 
   function startPan(ev: PointerEvent) {
     if (ev.button !== 0 || (ev.target as Element).closest('[data-task-id], .milestone, .ms-pop, .dep')) return;
+    if (ev.shiftKey) {
+      ev.preventDefault();
+      const p = canvasPoint(ev);
+      // Shift+Cmd/Ctrl adds to the selection; plain Shift replaces it.
+      marquee = { x0: p.x, y0: p.y, x: p.x, y: p.y, base: ev.metaKey || ev.ctrlKey ? sel : [] };
+      return;
+    }
     pan = { px: ev.clientX, py: ev.clientY, sl: scroller.scrollLeft, st: scroller.scrollTop, moved: false };
   }
 
@@ -426,6 +488,15 @@
       if (!drag.moved && Math.hypot(dx, dy) < 4) return;
       drag.moved = true;
       const dd = Math.round(dx / dw);
+      if (drag.group) {
+        for (const m of Object.values(drag.group)) {
+          const span = shiftSpan(m.s0, m.e0, dd, m.ww);
+          m.s = span.s;
+          m.e = span.e;
+        }
+        autoScroll(ev);
+        return;
+      }
       const span =
         drag.kind === 'move'
           ? shiftSpan(drag.s0, drag.e0, dd, drag.ww)
@@ -449,6 +520,17 @@
       const over = (document.elementFromPoint(ev.clientX, ev.clientY) as Element | null)?.closest<HTMLElement>('[data-task-id]');
       link.over = over && over.dataset.taskId !== link.from ? over.dataset.taskId! : null;
       autoScroll(ev);
+    } else if (marquee) {
+      const p = canvasPoint(ev);
+      marquee.x = p.x;
+      marquee.y = p.y;
+      const x1 = Math.min(marquee.x0, p.x);
+      const x2 = Math.max(marquee.x0, p.x);
+      const y1 = Math.min(marquee.y0, p.y);
+      const y2 = Math.max(marquee.y0, p.y);
+      const hit = [...geo].filter(([, g]) => g.x < x2 && g.x + g.w > x1 && g.y < y2 && g.y + BAR_H > y1).map(([id]) => id);
+      sel = [...new Set([...marquee.base, ...hit])];
+      autoScroll(ev);
     } else if (pan) {
       const dx = ev.clientX - pan.px;
       const dy = ev.clientY - pan.py;
@@ -466,7 +548,17 @@
       const t = app.taskById.get(d.id);
       if (!t) return;
       if (!d.moved) {
-        if (d.kind === 'move') ui.selectedTask = t.id;
+        if (d.kind === 'move') select([t.id]);
+        return;
+      }
+      if (d.group) {
+        const nexts: Task[] = [];
+        for (const [id, m] of Object.entries(d.group)) {
+          const tt = app.taskById.get(id);
+          const next = tt && { ...tt, start: toISO(m.s), end: toISO(m.e) };
+          if (next && (next.start !== tt.start || next.end !== tt.end)) nexts.push(next);
+        }
+        if (nexts.length) app.moveTasks(nexts);
         return;
       }
       let target: number | undefined;
@@ -492,11 +584,14 @@
       const l = link;
       link = null;
       if (l.over) app.addDependency(l.over, l.from);
+    } else if (marquee) {
+      marquee = null;
+      select(sel);
     } else if (pan) {
       const p = pan;
       pan = null;
       if (!p.moved) {
-        ui.selectedTask = null;
+        select([]);
         msEdit = null;
         confirmArrow.reset();
       }
@@ -591,6 +686,20 @@
       link = null;
       msDrag = null;
       msEdit = null;
+      marquee = null;
+      if (sel.length > 1) select([]);
+      return;
+    }
+    if (sel.length > 1 && ev.altKey && app.canEdit && (ev.key === 'ArrowLeft' || ev.key === 'ArrowRight')) {
+      ev.preventDefault();
+      const d = ev.key === 'ArrowLeft' ? -1 : 1;
+      const nexts = sel.flatMap((id) => {
+        const t = app.taskById.get(id);
+        if (!t) return [];
+        const span = shiftSpan(toDay(t.start), toDay(t.end), d, t.weekendWork);
+        return [{ ...t, start: toISO(span.s), end: toISO(span.e) }];
+      });
+      app.moveTasks(nexts);
       return;
     }
     const t = ui.selectedTask ? app.taskById.get(ui.selectedTask) : undefined;
@@ -739,7 +848,7 @@
     {#if app.canEdit}
       <span class="hint muted"
         >Double-click a lane to add a task, or a project's top strip to add a milestone. Drag the dot on a bar's right edge to link.
-        Alt+arrows move the selected task.</span
+        Alt+arrows move the selected task. Cmd/Ctrl-click or Shift-drag selects several to move together.</span
       >
     {:else}
       <span class="hint muted">View only</span>
@@ -1014,8 +1123,8 @@
               {@const pr = pressure.get(t.id)}
               <div
                 class="bar {t.status}"
-                class:selected={ui.selectedTask === t.id}
-                class:dragging={drag?.id === t.id && drag.moved}
+                class:selected={selSet.has(t.id)}
+                class:dragging={drag?.moved && (drag.id === t.id || !!drag.group?.[t.id])}
                 class:link-target={link?.over === t.id}
                 class:faded={!matches(t)}
                 data-task-id={t.id}
@@ -1078,6 +1187,16 @@
               {/if}
             {/if}
           {/each}
+
+          {#if marquee}
+            <div
+              class="marquee"
+              style:left="{Math.min(marquee.x0, marquee.x)}px"
+              style:top="{Math.min(marquee.y0, marquee.y)}px"
+              style:width="{Math.abs(marquee.x - marquee.x0)}px"
+              style:height="{Math.abs(marquee.y - marquee.y0)}px"
+            ></div>
+          {/if}
         </div>
       </div>
     </div>
@@ -1595,6 +1714,14 @@
     cursor: grabbing;
     box-shadow: var(--shadow);
     opacity: 0.9;
+  }
+
+  .marquee {
+    position: absolute;
+    z-index: 8;
+    border: 1px solid var(--accent);
+    background: color-mix(in srgb, var(--accent) 12%, transparent);
+    pointer-events: none;
   }
 
   .bar.link-target {
