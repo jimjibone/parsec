@@ -78,3 +78,25 @@ export function place(input: Slot[], moved: Slot, target?: number): Slot[] {
   compact(slots);
   return slots;
 }
+
+/**
+ * Place several tasks at once (each in `moved` holding its new s/e; its lane
+ * is ignored). Each keeps its current lane in `input` if free, else takes the
+ * nearest free lane, taken in lane order so the group keeps its stacking.
+ */
+export function placeMany(input: Slot[], moved: Slot[]): Slot[] {
+  const next = new Map(moved.map((m) => [m.id, m]));
+  let slots = input.map((x) => {
+    const m = next.get(x.id);
+    return m ? { ...x, s: m.s, e: m.e } : { ...x };
+  });
+  const order = slots.filter((x) => next.has(x.id)).sort((a, b) => a.lane - b.lane || a.s - b.s || a.id.localeCompare(b.id));
+  for (const { id } of order) {
+    // Lanes renumber after each place, so read the current one back.
+    slots = place(
+      slots,
+      slots.find((x) => x.id === id)!,
+    );
+  }
+  return slots;
+}

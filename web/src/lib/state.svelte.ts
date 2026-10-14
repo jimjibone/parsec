@@ -1,5 +1,5 @@
 import { api, ApiError, CLIENT_ID, setNetworkErrorHandler, setUnauthorizedHandler } from './api';
-import { place, resolve, type Slot } from './lanes';
+import { place, placeMany, resolve, type Slot } from './lanes';
 import { toDay, toISO, today } from './dates';
 import { addWorkDays, snapWorkday } from './schedule';
 import { assignColors, nextPersonColor, UNKNOWN_PERSON_COLOR } from './people';
@@ -394,6 +394,30 @@ class AppState {
     if (prev && prev.projectId !== next.projectId) layoutProject(prev.projectId);
 
     const batch = [...changed.values()];
+    this.mergeTasks(batch); // optimistic
+    const saved = await this.run(() => api.updateTasks(batch));
+    if (saved) this.mergeTasks(saved);
+  }
+
+  /**
+   * Save new dates for several tasks in one request (one undo step),
+   * re-packing lanes in each project they belong to. Projects don't change.
+   */
+  async moveTasks(nexts: Task[]) {
+    const moving = new Map(nexts.map((t) => [t.id, t]));
+    const changed = new Map<string, Task>();
+    for (const pid of new Set(nexts.map((t) => t.projectId))) {
+      const base = this.tasks
+        .filter((t) => t.projectId === pid)
+        .map((t) => ({ id: t.id, s: toDay(t.start), e: toDay(t.end), lane: this.displayLane.get(t.id) ?? 0 }));
+      const moved = nexts.filter((t) => t.projectId === pid).map((t) => ({ id: t.id, s: toDay(t.start), e: toDay(t.end), lane: 0 }));
+      for (const s of placeMany(base, moved)) {
+        const t = moving.get(s.id) ?? this.taskById.get(s.id)!;
+        if (moving.has(s.id) || t.lane !== s.lane) changed.set(s.id, { ...t, lane: s.lane });
+      }
+    }
+    const batch = [...changed.values()];
+    if (!batch.length) return;
     this.mergeTasks(batch); // optimistic
     const saved = await this.run(() => api.updateTasks(batch));
     if (saved) this.mergeTasks(saved);
