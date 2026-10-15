@@ -1,4 +1,5 @@
-// Decides what goes inside a timeline bar: the title and/or assignee pills.
+// Decides what goes inside a timeline bar: the status glyph, the title and/or
+// assignee pills.
 // Assignees take priority over a full-length title, so short bars still
 // show who is on them. Widths are estimates matching the .av / .label CSS.
 
@@ -11,8 +12,10 @@ const TITLE_MAX = 200; // never reserve more than this for the title
 const TITLE_MIN = 60; // shortest useful truncated title
 const LONG_BAR = 160; // inner width at which the title stays inside, truncated
 const OUTSIDE_TITLE_MIN = 30; // outside label is hidden below this width (Timeline)
+const GLYPH_W = 12; // StatusIcon size on bars
 
 export interface BarLayout {
+  glyphInside: boolean; // status glyph in the bar (else in the outside label)
   titleInside: boolean;
   pillsInside: boolean;
   shown: number; // assignees shown as initials
@@ -39,9 +42,17 @@ export function fitPills(n: number, avail: number): { shown: number; more: numbe
 /**
  * `room` is the free px to the right of the bar (before the next bar in the
  * row), used to decide whether the outside label can hold the pills.
+ * The status glyph comes first: it sits inside whenever it fits, otherwise
+ * in front of the outside label.
  */
 export function barLayout(barWidth: number, titleChars: number, assignees: number, room = Infinity): BarLayout {
   const inner = barWidth - 2 * BAR_PAD;
+  const glyphInside = inner >= GLYPH_W;
+  const rest = glyphInside ? inner - GLYPH_W - INNER_GAP : inner;
+  return { glyphInside, ...contentLayout(rest, titleChars, assignees, room) };
+}
+
+function contentLayout(inner: number, titleChars: number, assignees: number, room: number): Omit<BarLayout, 'glyphInside'> {
   const titleW = Math.min(TITLE_MAX, titleChars * CHAR_W);
   const gap = assignees ? INNER_GAP : 0;
 

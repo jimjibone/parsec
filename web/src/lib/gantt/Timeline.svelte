@@ -3,6 +3,7 @@
   import { app } from '../state.svelte';
   import { ui, DAY_WIDTH, UNASSIGNED, type Zoom } from '../ui.svelte';
   import Icon from '../Icon.svelte';
+  import StatusIcon from '../StatusIcon.svelte';
   import { TwoClick } from '../confirm.svelte';
   import {
     addMonths,
@@ -1153,6 +1154,9 @@
                 {#if app.canEdit}
                   <div class="handle l" onpointerdown={(e) => startDrag(e, t, 'start')} role="presentation"></div>
                 {/if}
+                {#if lay.glyphInside}
+                  <span class="glyph"><StatusIcon status={t.status} /></span>
+                {/if}
                 {#if lay.titleInside}
                   <span class="label">{t.title}</span>
                 {/if}
@@ -1178,6 +1182,7 @@
                   style:height="{BAR_H}px"
                   style:max-width={room === Infinity ? null : `${room}px`}
                 >
+                  {#if !lay.glyphInside}<span class="glyph status-{t.status}"><StatusIcon status={t.status} /></span>{/if}
                   {#if !lay.pillsInside}{@render pills(t, lay)}{/if}
                   <span class="ot">{t.title}</span>
                 </span>
@@ -1686,8 +1691,31 @@
     touch-action: none;
   }
 
+  /* Not started: pale fill with a project-colour edge, so it reads apart
+     from the solid in-progress bar. Inset shadow keeps the bar's size. */
   .bar.todo {
-    background: color-mix(in srgb, var(--c) 72%, var(--surface));
+    background: color-mix(in srgb, var(--c) 14%, var(--surface));
+    box-shadow:
+      inset 0 0 0 1.5px var(--c),
+      0 1px 2px rgba(0, 0, 0, 0.1);
+    color: var(--text);
+  }
+
+  .bar.todo .label {
+    text-shadow: none;
+  }
+
+  .bar.todo .glyph {
+    color: var(--text-2);
+  }
+
+  .glyph {
+    position: relative;
+    flex: none;
+  }
+
+  .outside-label .glyph.status-blocked {
+    color: var(--danger);
   }
 
   .bar.done {
@@ -1714,6 +1742,12 @@
     cursor: grabbing;
     box-shadow: var(--shadow);
     opacity: 0.9;
+  }
+
+  .bar.todo.dragging {
+    box-shadow:
+      inset 0 0 0 1.5px var(--c),
+      var(--shadow);
   }
 
   .marquee {
