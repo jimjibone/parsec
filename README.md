@@ -65,6 +65,13 @@ come from git.
   (name, colour, description, milestones), people list.
 - Git panel: changed files, commit, pull (rebase), push, sync, remote URL,
   history, abort a conflicted rebase.
+- Compare with the last commit: the clock button next to the git button
+  shows the data as of HEAD, read-only, with local changes marked. Tasks
+  and milestones moved since get a dashed ring plus a dashed ghost at their
+  local dates, edited ones a dotted ring, deleted ones a red dashed ring,
+  and added ones show as pale dashed ghosts. Tooltips and the task table
+  name the changed fields. Click the button again (or "Back to local") to
+  return to editing.
 - Undo/redo: buttons next to the git button, or Cmd+Z / Cmd+Shift+Z
   (Ctrl+Z / Ctrl+Shift+Z / Ctrl+Y elsewhere) outside text fields. Each person
   undoes only their own changes. The server keeps the stack in memory, so a

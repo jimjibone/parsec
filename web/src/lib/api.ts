@@ -85,6 +85,7 @@ export const api = {
 
   gitStatus: () => req<GitStatus>('GET', '/api/git/status'),
   gitLog: () => req<GitCommit[]>('GET', '/api/git/log'),
+  gitHead: () => req<Snapshot & { hash: string }>('GET', '/api/git/head'),
   gitCommit: (message: string) => req<{ output: string }>('POST', '/api/git/commit', { message }),
   gitPull: () => req<{ output: string }>('POST', '/api/git/pull'),
   gitPush: () => req<{ output: string }>('POST', '/api/git/push'),

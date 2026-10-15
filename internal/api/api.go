@@ -10,6 +10,7 @@ import (
 	"log"
 	"net/http"
 	"net/url"
+	"os"
 	"strings"
 	"sync"
 
@@ -195,6 +196,33 @@ func (s *Server) Handler() http.Handler {
 	})))
 	mux.HandleFunc("GET /api/git/log", s.require(auth.RoleViewer, s.locked(func(w http.ResponseWriter, r *http.Request) {
 		respond(w)(s.repo.Log(30))
+	})))
+	// The data as of the last commit, for comparing with local changes.
+	mux.HandleFunc("GET /api/git/head", s.require(auth.RoleViewer, s.locked(func(w http.ResponseWriter, r *http.Request) {
+		dir, err := os.MkdirTemp("", "parsec-head-")
+		if err != nil {
+			writeError(w, err)
+			return
+		}
+		defer os.RemoveAll(dir)
+		hash, err := s.repo.ExportHead(dir)
+		if errors.Is(err, gitrepo.ErrNoCommits) {
+			writeJSON(w, http.StatusNotFound, map[string]string{"error": "No commits yet"})
+			return
+		}
+		if err != nil {
+			writeError(w, err)
+			return
+		}
+		head, err := store.Open(dir)
+		if err != nil {
+			writeError(w, err)
+			return
+		}
+		writeJSON(w, http.StatusOK, struct {
+			store.Snapshot
+			Hash string `json:"hash"`
+		}{head.Snapshot(), hash})
 	})))
 	mux.HandleFunc("POST /api/git/commit", s.require(auth.RoleAdmin, s.locked(func(w http.ResponseWriter, r *http.Request) {
 		var body struct {

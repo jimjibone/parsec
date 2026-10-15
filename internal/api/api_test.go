@@ -422,6 +422,42 @@ func TestPlanning(t *testing.T) {
 	}
 }
 
+func TestGitHead(t *testing.T) {
+	e := newEnv(t)
+	alice := e.signIn("alice", "Alice Example", "tab-a")
+	bob := e.signIn("bob", "Bob Sample", "tab-b")
+
+	if c := bob.do("GET", "/api/git/head", nil, nil); c != 404 {
+		t.Fatalf("head before any commit = %d", c)
+	}
+
+	var p store.Project
+	alice.do("POST", "/api/projects", store.Project{Name: "Refit"}, &p)
+	var task store.Task
+	alice.do("POST", "/api/tasks", store.Task{ProjectID: p.ID, Title: "Hyperdrive", Status: "todo", Start: "2026-01-05", End: "2026-01-06"}, &task)
+	e.srv.mu.Lock()
+	e.srv.flush(true)
+	e.srv.mu.Unlock()
+
+	task.Title = "Hyperdrive v2"
+	var saved map[string]any
+	if c := alice.do("PUT", "/api/tasks", []store.Task{task}, &saved); c != 200 {
+		t.Fatalf("edit = %d", c)
+	}
+
+	// Viewers can read it; it holds the committed title, not the local edit.
+	var head struct {
+		store.Snapshot
+		Hash string `json:"hash"`
+	}
+	if c := bob.do("GET", "/api/git/head", nil, &head); c != 200 {
+		t.Fatalf("head = %d", c)
+	}
+	if len(head.Hash) != 7 || len(head.Projects) != 1 || len(head.Tasks) != 1 || head.Tasks[0].Title != "Hyperdrive" {
+		t.Fatalf("head = %+v", head)
+	}
+}
+
 func TestEventsStream(t *testing.T) {
 	e := newEnv(t)
 	alice := e.signIn("alice", "Alice Example", "tab-a")

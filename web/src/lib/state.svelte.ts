@@ -3,6 +3,7 @@ import { place, placeMany, resolve, type Slot } from './lanes';
 import { toDay, toISO, today } from './dates';
 import { addWorkDays, snapWorkday } from './schedule';
 import { assignColors, nextPersonColor, UNKNOWN_PERSON_COLOR } from './people';
+import { compareView } from './compare';
 import { taskPressure, type Pressure } from './pressure';
 import {
   PROJECT_COLORS,
@@ -14,6 +15,7 @@ import {
   type Person,
   type Planning,
   type Project,
+  type Snapshot,
   type Task,
 } from './types';
 
@@ -27,10 +29,27 @@ export interface Toast {
 }
 
 class AppState {
-  projects = $state<Project[]>([]);
-  tasks = $state<Task[]>([]);
-  people = $state<Person[]>([]);
-  planning = $state<Planning>({ hoursPerDay: 6, assigneeFactor: 1, version: '' });
+  // The server's current data. Mutations work on these.
+  private liveProjects = $state<Project[]>([]);
+  private liveTasks = $state<Task[]>([]);
+  private livePeople = $state<Person[]>([]);
+  private livePlanning = $state<Planning>({ hoursPerDay: 6, assigneeFactor: 1, version: '' });
+
+  /** The last commit's data while comparing with it; null otherwise. */
+  head = $state<(Snapshot & { hash: string }) | null>(null);
+  /** Committed data with local changes marked, while comparing. */
+  compare = $derived(
+    this.head
+      ? compareView(this.head, { projects: this.liveProjects, tasks: this.liveTasks, people: this.livePeople, planning: this.livePlanning })
+      : null,
+  );
+
+  // What the views show: the live data, or the last commit while comparing.
+  projects = $derived(this.compare?.projects ?? this.liveProjects);
+  tasks = $derived(this.compare?.tasks ?? this.liveTasks);
+  people = $derived(this.compare?.people ?? this.livePeople);
+  planning = $derived(this.compare?.planning ?? this.livePlanning);
+
   loaded = $state(false);
   loadError = $state('');
   git = $state<GitStatus | null>(null);
@@ -83,7 +102,8 @@ class AppState {
   me = $state<Me | null>(null);
   meError = $state('');
   role = $derived<Role>(this.me?.user?.role ?? 'none');
-  canEdit = $derived(this.role === 'editor' || this.role === 'admin');
+  /** Editing is off while comparing with the last commit. */
+  canEdit = $derived((this.role === 'editor' || this.role === 'admin') && !this.head);
   isAdmin = $derived(this.role === 'admin');
   /** More than one person can use this server (any sign-in mode). */
   shared = $derived(!!this.me && this.me.auth.mode !== 'none');
@@ -267,10 +287,10 @@ class AppState {
   async load() {
     try {
       const s = await api.state();
-      this.projects = s.projects;
-      this.tasks = s.tasks;
-      this.people = s.people;
-      this.planning = s.planning;
+      this.liveProjects = s.projects;
+      this.liveTasks = s.tasks;
+      this.livePeople = s.people;
+      this.livePlanning = s.planning;
       this.loaded = true;
       this.loadError = '';
     } catch (e) {
@@ -298,7 +318,36 @@ class AppState {
       const [git, history] = await Promise.allSettled([api.gitStatus(), api.history()]);
       this.git = git.status === 'fulfilled' ? git.value : null;
       this.history = history.status === 'fulfilled' ? history.value : { undo: '', redo: '' };
+      // A commit, pull or reset may have moved HEAD.
+      if (this.head) this.fetchHead();
     }, 300);
+  }
+
+  // ---- compare with the last commit ----
+
+  private headSeq = 0;
+
+  /** Show the last commit's data (read-only) with local changes marked, or go back. */
+  async setCompare(on: boolean) {
+    if (on) await this.fetchHead(true);
+    else {
+      this.headSeq++;
+      this.head = null;
+    }
+  }
+
+  private async fetchHead(entering = false) {
+    const seq = ++this.headSeq;
+    try {
+      const head = await api.gitHead();
+      if (seq === this.headSeq && (entering || this.head)) this.head = head;
+    } catch (e) {
+      if (seq !== this.headSeq) return;
+      this.head = null;
+      this.toast(
+        e instanceof ApiError && e.status === 404 ? 'Nothing to compare with: no commits yet.' : String((e as Error).message ?? e),
+      );
+    }
   }
 
   /** Run a mutation; on failure show the error and resync from the server. */
@@ -354,8 +403,8 @@ class AppState {
   private mergeTasks(ts: Task[]) {
     if (!ts.length) return;
     const byId = new Map(ts.map((t) => [t.id, t]));
-    const existing = new Set(this.tasks.map((t) => t.id));
-    this.tasks = [...this.tasks.map((t) => byId.get(t.id) ?? t), ...ts.filter((t) => !existing.has(t.id))];
+    const existing = new Set(this.liveTasks.map((t) => t.id));
+    this.liveTasks = [...this.liveTasks.map((t) => byId.get(t.id) ?? t), ...ts.filter((t) => !existing.has(t.id))];
   }
 
   private slots(projectId: string): Slot[] {
@@ -374,7 +423,7 @@ class AppState {
 
     const layoutProject = (pid: string, moved?: Slot, target?: number) => {
       // Start from the conflict-free display layout, not raw stored lanes.
-      const base = this.tasks
+      const base = this.liveTasks
         .filter((t) => t.projectId === pid && t.id !== next.id)
         .map((t) => ({ id: t.id, s: toDay(t.start), e: toDay(t.end), lane: curLane(t.id) }));
       const slots = moved ? place(base, moved, target) : resolve(base);
@@ -407,7 +456,7 @@ class AppState {
     const moving = new Map(nexts.map((t) => [t.id, t]));
     const changed = new Map<string, Task>();
     for (const pid of new Set(nexts.map((t) => t.projectId))) {
-      const base = this.tasks
+      const base = this.liveTasks
         .filter((t) => t.projectId === pid)
         .map((t) => ({ id: t.id, s: toDay(t.start), e: toDay(t.end), lane: this.displayLane.get(t.id) ?? 0 }));
       const moved = nexts.filter((t) => t.projectId === pid).map((t) => ({ id: t.id, s: toDay(t.start), e: toDay(t.end), lane: 0 }));
@@ -442,7 +491,7 @@ class AppState {
       weekendWork,
       projectId,
     };
-    const base = this.tasks
+    const base = this.liveTasks
       .filter((x) => x.projectId === projectId)
       .map((x) => ({ id: x.id, s: toDay(x.start), e: toDay(x.end), lane: this.displayLane.get(x.id) ?? 0 }));
     const fresh = { id: '', s: toDay(t.start!), e: toDay(t.end!), lane: t.lane ?? 0 };
@@ -453,7 +502,7 @@ class AppState {
   }
 
   async deleteTask(id: string) {
-    this.tasks = this.tasks.filter((t) => t.id !== id);
+    this.liveTasks = this.liveTasks.filter((t) => t.id !== id);
     const r = await this.run(() => api.deleteTask(id));
     if (r) this.mergeTasks(r.changedTasks);
   }
@@ -471,16 +520,16 @@ class AppState {
   }
 
   async createProject(name: string): Promise<Project | undefined> {
-    const color = PROJECT_COLORS[this.projects.length % PROJECT_COLORS.length];
+    const color = PROJECT_COLORS[this.liveProjects.length % PROJECT_COLORS.length];
     const p = await this.run(() => api.createProject({ name, color, milestones: [] }));
-    if (p) this.projects = [...this.projects, p];
+    if (p) this.liveProjects = [...this.liveProjects, p];
     return p;
   }
 
   async saveProject(p: Project): Promise<Project | undefined> {
-    this.projects = this.projects.map((x) => (x.id === p.id ? p : x));
+    this.liveProjects = this.liveProjects.map((x) => (x.id === p.id ? p : x));
     const saved = await this.run(() => api.updateProject(p));
-    if (saved) this.projects = this.projects.map((x) => (x.id === saved.id ? saved : x));
+    if (saved) this.liveProjects = this.liveProjects.map((x) => (x.id === saved.id ? saved : x));
     return saved;
   }
 
@@ -510,46 +559,46 @@ class AppState {
    * projects count as neighbours (e.g. only those visible on the timeline),
    * so a move always passes a visible project.
    */
-  async moveProject(id: string, dir: -1 | 1, among: string[] = this.projects.map((p) => p.id)) {
+  async moveProject(id: string, dir: -1 | 1, among: string[] = this.liveProjects.map((p) => p.id)) {
     const i = among.indexOf(id);
     const neighbour = among[i + dir];
     if (i < 0 || !neighbour) return;
-    const ids = this.projects.map((p) => p.id).filter((x) => x !== id);
+    const ids = this.liveProjects.map((p) => p.id).filter((x) => x !== id);
     const at = ids.indexOf(neighbour) + (dir > 0 ? 1 : 0);
     ids.splice(at, 0, id);
 
     const byId = this.projectById;
-    this.projects = ids.map((x, order) => ({ ...byId.get(x)!, order })); // optimistic
+    this.liveProjects = ids.map((x, order) => ({ ...byId.get(x)!, order })); // optimistic
     const saved = await this.run(() => api.reorderProjects(ids));
-    if (saved) this.projects = saved;
+    if (saved) this.liveProjects = saved;
   }
 
   async deleteProject(id: string) {
-    this.projects = this.projects.filter((p) => p.id !== id);
-    this.tasks = this.tasks.filter((t) => t.projectId !== id);
+    this.liveProjects = this.liveProjects.filter((p) => p.id !== id);
+    this.liveTasks = this.liveTasks.filter((t) => t.projectId !== id);
     const r = await this.run(() => api.deleteProject(id));
     if (r) this.mergeTasks(r.changedTasks);
   }
 
   async createPerson(name: string): Promise<Person | undefined> {
-    const p = await this.run(() => api.createPerson(name, nextPersonColor(this.people)));
-    if (p) this.people = [...this.people, p];
+    const p = await this.run(() => api.createPerson(name, nextPersonColor(this.livePeople)));
+    if (p) this.livePeople = [...this.livePeople, p];
     return p;
   }
 
   async savePerson(p: Person) {
-    this.people = this.people.map((x) => (x.id === p.id ? p : x));
+    this.livePeople = this.livePeople.map((x) => (x.id === p.id ? p : x));
     await this.run(() => api.updatePerson(p));
   }
 
   async savePlanning(p: Planning) {
-    this.planning = p;
+    this.livePlanning = p;
     const saved = await this.run(() => api.updatePlanning(p));
-    if (saved) this.planning = saved;
+    if (saved) this.livePlanning = saved;
   }
 
   async deletePerson(id: string) {
-    this.people = this.people.filter((p) => p.id !== id);
+    this.livePeople = this.livePeople.filter((p) => p.id !== id);
     const r = await this.run(() => api.deletePerson(id));
     if (r) this.mergeTasks(r.changedTasks);
   }
