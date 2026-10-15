@@ -40,6 +40,10 @@ come from git.
   "first one or two + N" or a bare count.
 - Highlight a person (or "Unassigned") on the timeline to fade every other
   task.
+- Status reads from both fill and a glyph: to-do bars are pale with a
+  project-colour edge and an empty ring, in-progress bars are solid with a
+  half-filled ring, blocked bars are hatched with a red edge, done bars are
+  faded with a tick. The task table uses the same glyphs.
 - Task panel: title, status, project, dates, estimate (hours), assignees,
   dependencies, description.
 - Task pressure: a task's estimate divided by the working hours its bar

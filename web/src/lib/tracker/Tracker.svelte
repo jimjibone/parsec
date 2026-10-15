@@ -2,6 +2,7 @@
   import { app } from '../state.svelte';
   import { ui } from '../ui.svelte';
   import Icon from '../Icon.svelte';
+  import StatusIcon from '../StatusIcon.svelte';
   import ProjectEditor from './ProjectEditor.svelte';
   import { TwoClick } from '../confirm.svelte';
   import { formatShort, toDay, toISO, today } from '../dates';
@@ -335,15 +336,17 @@
                 <td class="w-title"><span class="dot" style:background={p?.color}></span>{t.title}</td>
                 {#if !selected}<td class="muted">{p?.name}</td>{/if}
                 <td>
-                  <select
-                    class="status-sel {t.status}"
-                    value={t.status}
-                    disabled={!app.canEdit}
-                    onclick={(e) => e.stopPropagation()}
-                    onchange={(e) => setStatus(t, e.currentTarget.value as Task['status'])}
-                  >
-                    {#each STATUSES as s (s.id)}<option value={s.id}>{s.label}</option>{/each}
-                  </select>
+                  <span class="status-sel {t.status}">
+                    <StatusIcon status={t.status} />
+                    <select
+                      value={t.status}
+                      disabled={!app.canEdit}
+                      onclick={(e) => e.stopPropagation()}
+                      onchange={(e) => setStatus(t, e.currentTarget.value as Task['status'])}
+                    >
+                      {#each STATUSES as s (s.id)}<option value={s.id}>{s.label}</option>{/each}
+                    </select>
+                  </span>
                 </td>
                 <td>
                   {#each t.assignees as a (a)}<span class="chip plain"
@@ -660,25 +663,48 @@
     color: var(--danger);
   }
 
+  /* Shape (icon), fill and colour all differ per status. */
   .status-sel {
-    padding: 1px 6px;
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 0 0 0 7px;
     font-size: 12px;
     border-radius: 999px;
-    border-color: transparent;
-    background: var(--surface-3);
+    border: 1px dashed var(--border-strong);
+    color: var(--text-2);
+  }
+
+  .status-sel select {
+    padding: 1px 6px 1px 0;
+    border: 0;
+    background: none;
+    color: inherit;
+    font-weight: inherit;
+  }
+
+  .status-sel option {
+    background: var(--surface);
+    color: var(--text);
   }
 
   .status-sel.doing {
-    background: var(--accent-soft);
-    color: var(--accent);
+    border: 1px solid var(--accent);
+    background: var(--accent);
+    color: var(--accent-text);
+    font-weight: 600;
   }
 
   .status-sel.blocked {
+    border: 1px solid var(--danger);
     background: var(--danger-soft);
     color: var(--danger);
+    font-weight: 600;
   }
 
   .status-sel.done {
+    border: 1px solid transparent;
+    background: color-mix(in srgb, var(--ok) 14%, transparent);
     color: var(--ok);
   }
 
