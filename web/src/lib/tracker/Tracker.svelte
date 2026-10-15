@@ -7,6 +7,7 @@
   import { TwoClick } from '../confirm.svelte';
   import { formatShort, toDay, toISO, today } from '../dates';
   import { fmtRatio, pressureLabel } from '../pressure';
+  import { changeLine } from '../compare';
   import { STATUSES, type Person, type Task } from '../types';
 
   type SortKey = 'title' | 'project' | 'status' | 'start' | 'end' | 'estimate' | 'pressure' | 'created';
@@ -332,8 +333,15 @@
             {#each rows as t (t.id)}
               {@const p = app.projectById.get(t.projectId)}
               {@const pr = pressure.get(t.id)}
+              {@const chg = app.compare?.tasksChanged.get(t.id)}
               <tr class:sel={ui.selectedTask === t.id} class:done={t.status === 'done'} onclick={() => (ui.selectedTask = t.id)}>
-                <td class="w-title"><span class="dot" style:background={p?.color}></span>{t.title}</td>
+                <td class="w-title"
+                  ><span class="dot" style:background={p?.color}></span>{t.title}{#if chg}<span
+                      class="chg-tag {chg.kind}"
+                      title={changeLine(chg)}
+                      >{chg.kind === 'removed' ? 'deleted' : chg.kind === 'added' ? 'added' : chg.fields.join(', ')}</span
+                    >{/if}</td
+                >
                 {#if !selected}<td class="muted">{p?.name}</td>{/if}
                 <td>
                   <span class="status-sel {t.status}">
@@ -660,6 +668,25 @@
   }
 
   .overdue {
+    color: var(--danger);
+  }
+
+  /* Compare mode: local changes since the last commit. */
+  .chg-tag {
+    margin-left: 6px;
+    padding: 0 5px;
+    border: 1px dotted var(--text-2);
+    border-radius: 4px;
+    font-size: 11px;
+    color: var(--text-2);
+  }
+
+  .chg-tag.added {
+    border-style: dashed;
+  }
+
+  .chg-tag.removed {
+    border: 1px dashed var(--danger);
     color: var(--danger);
   }
 

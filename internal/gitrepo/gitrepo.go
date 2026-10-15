@@ -3,10 +3,12 @@
 package gitrepo
 
 import (
+	"archive/tar"
 	"bytes"
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -168,6 +170,75 @@ func (r *Repo) Log(n int) ([]Commit, error) {
 		}
 	}
 	return commits, nil
+}
+
+// ErrNoCommits is returned by ExportHead in a repository without commits.
+var ErrNoCommits = errors.New("no commits yet")
+
+// ExportHead writes the files of the last commit into dst and returns its
+// abbreviated hash. The working tree and index are not touched.
+func (r *Repo) ExportHead(dst string) (string, error) {
+	out, err := r.run("rev-parse", "--verify", "--quiet", "HEAD^{commit}")
+	if err != nil {
+		return "", ErrNoCommits
+	}
+	hash := strings.TrimSpace(out)
+
+	ctx, cancel := context.WithTimeout(context.Background(), timeout)
+	defer cancel()
+	args := []string{"archive", "--format=tar", hash}
+	cmd := exec.CommandContext(ctx, "git", args...)
+	cmd.Dir = r.dir
+	var stderr bytes.Buffer
+	cmd.Stderr = &stderr
+	stdout, err := cmd.StdoutPipe()
+	if err != nil {
+		return "", err
+	}
+	if err := cmd.Start(); err != nil {
+		return "", err
+	}
+	extractErr := extractTar(stdout, dst)
+	io.Copy(io.Discard, stdout) // let git finish if extraction stopped early
+	if err := cmd.Wait(); err != nil {
+		return "", &Error{Args: args, Output: stderr.String(), Err: err}
+	}
+	if extractErr != nil {
+		return "", extractErr
+	}
+	return hash[:min(len(hash), 7)], nil
+}
+
+// extractTar writes the regular files of a tar stream under dst.
+func extractTar(r io.Reader, dst string) error {
+	tr := tar.NewReader(r)
+	for {
+		h, err := tr.Next()
+		if err == io.EOF {
+			return nil
+		}
+		if err != nil {
+			return err
+		}
+		if h.Typeflag != tar.TypeReg || !filepath.IsLocal(h.Name) {
+			continue
+		}
+		path := filepath.Join(dst, filepath.FromSlash(h.Name))
+		if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+			return err
+		}
+		f, err := os.Create(path)
+		if err != nil {
+			return err
+		}
+		_, err = io.Copy(f, tr)
+		if cerr := f.Close(); err == nil {
+			err = cerr
+		}
+		if err != nil {
+			return err
+		}
+	}
 }
 
 // Commit stages everything and commits. A clean tree is not an error.

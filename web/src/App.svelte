@@ -30,6 +30,9 @@
   });
 
   const dirty = $derived(app.git?.files.length ?? 0);
+  const changeCount = $derived(
+    app.compare ? app.compare.tasksChanged.size + app.compare.projectsChanged.size + app.compare.milestonesChanged.size : 0,
+  );
   const user = $derived(app.me?.user ?? null);
   // In shared mode only admins drive git; everyone else sees nothing of it.
   const showGit = $derived(!app.shared || app.isAdmin);
@@ -140,6 +143,21 @@
       {/if}
 
       {#if showGit}
+        <button
+          class="icon-btn compare-btn"
+          class:open={app.head}
+          aria-pressed={!!app.head}
+          disabled={!app.head && !!app.git?.noCommits}
+          onclick={() => app.setCompare(!app.head)}
+          title={app.head
+            ? 'Back to local changes'
+            : app.git?.noCommits
+              ? 'No commits to compare with yet'
+              : 'Compare with the last commit (read-only)'}
+          aria-label="Compare with the last commit"
+        >
+          <Icon name="history" />
+        </button>
         <button class="git-btn" class:open={ui.gitOpen} onclick={() => (ui.gitOpen = !ui.gitOpen)} title="Git sync">
           <Icon name="branch" />
           <span>{app.git?.branch ?? 'git'}</span>
@@ -198,6 +216,23 @@
         <Tracker />
       {/if}
     </main>
+
+    <!-- Below main so toggling it never moves the views' content. -->
+    {#if app.head}
+      <div class="compare-bar" role="status">
+        <Icon name="history" />
+        <span>
+          Showing the last commit <code>{app.head.hash}</code>, read-only.
+          {#if changeCount}
+            {changeCount} local {changeCount === 1 ? 'change' : 'changes'} marked: dashed outlines are added or moved, red ones deleted, dotted
+            ones edited.
+          {:else}
+            No local changes.
+          {/if}
+        </span>
+        <button onclick={() => app.setCompare(false)}>Back to local</button>
+      </div>
+    {/if}
 
     {#if ui.selectedTask && app.taskById.get(ui.selectedTask)}
       <TaskDrawer taskId={ui.selectedTask} />
@@ -276,6 +311,32 @@
   .history {
     display: flex;
     gap: 2px;
+  }
+
+  .compare-btn.open {
+    border-color: var(--accent);
+    background: var(--accent-soft);
+    color: var(--accent);
+  }
+
+  .compare-bar {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    flex: none;
+    padding: 6px 16px;
+    border-top: 1px solid var(--border);
+    background: var(--accent-soft);
+    color: var(--text);
+    font-size: 13px;
+  }
+
+  .compare-bar span {
+    flex: 1;
+  }
+
+  .compare-bar code {
+    font-family: var(--mono);
   }
 
   .conn {

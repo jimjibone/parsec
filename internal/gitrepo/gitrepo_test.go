@@ -155,6 +155,43 @@ func TestCommitPaths(t *testing.T) {
 	}
 }
 
+func TestExportHead(t *testing.T) {
+	isolate(t)
+	r, err := Open(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := r.ExportHead(t.TempDir()); err != ErrNoCommits {
+		t.Fatalf("empty repo: err = %v", err)
+	}
+
+	os.MkdirAll(filepath.Join(r.dir, "p", "tasks"), 0o755)
+	write(t, filepath.Join(r.dir, "p", "tasks", "t.yaml"), "t: 1\n")
+	if _, err := r.Commit("first"); err != nil {
+		t.Fatal(err)
+	}
+	// Local edits after the commit must not show in the export.
+	write(t, filepath.Join(r.dir, "p", "tasks", "t.yaml"), "t: 2\n")
+	write(t, filepath.Join(r.dir, "new.yaml"), "n: 1\n")
+
+	dst := t.TempDir()
+	hash, err := r.ExportHead(dst)
+	if err != nil || len(hash) != 7 {
+		t.Fatalf("hash = %q, err = %v", hash, err)
+	}
+	b, err := os.ReadFile(filepath.Join(dst, "p", "tasks", "t.yaml"))
+	if err != nil || string(b) != "t: 1\n" {
+		t.Fatalf("t.yaml = %q, %v", b, err)
+	}
+	if _, err := os.Stat(filepath.Join(dst, "new.yaml")); !os.IsNotExist(err) {
+		t.Fatalf("new.yaml exported: %v", err)
+	}
+	st, _ := r.Status()
+	if len(st.Files) != 2 {
+		t.Fatalf("working tree changed: %+v", st.Files)
+	}
+}
+
 func TestPushWithoutRemote(t *testing.T) {
 	isolate(t)
 	r, err := Open(t.TempDir())

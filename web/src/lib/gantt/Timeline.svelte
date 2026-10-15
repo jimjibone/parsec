@@ -26,6 +26,7 @@
   import { fmtDays, fmtHours, fmtRatio, pressureLabel, SEP, type Pressure } from '../pressure';
   import type { Milestone, Project, Task } from '../types';
   import { STATUSES } from '../types';
+  import { changeLine } from '../compare';
 
   const SIDEBAR_W = 260;
   const HEAD_H = 48;
@@ -761,7 +762,8 @@
       .filter(Boolean)
       .join(', ');
     const pr = pressure.get(t.id);
-    return `${t.title}\n${formatShort(t.start)} - ${formatShort(t.end)} (${st})${who ? `\n${who}` : ''}${pr ? `\n${pressureLine(pr)}` : ''}`;
+    const chg = changeLine(app.compare?.tasksChanged.get(t.id));
+    return `${t.title}\n${formatShort(t.start)} - ${formatShort(t.end)} (${st})${who ? `\n${who}` : ''}${pr ? `\n${pressureLine(pr)}` : ''}${chg ? `\n${chg}` : ''}`;
   }
 
   // e.g. "Pressure 111%, 40h over 3 working days (needs 4)", joined by SEP
@@ -933,6 +935,12 @@
                     tabindex="-1">{p.name}</span
                   >
                   <span class="count muted">{count}</span>
+                  {@const pchg = app.compare?.projectsChanged.get(p.id)}
+                  {#if pchg}
+                    <span class="chg-tag {pchg.kind}" title={changeLine(pchg)}
+                      >{pchg.kind === 'removed' ? 'deleted' : pchg.kind === 'added' ? 'added' : 'edited'}</span
+                    >
+                  {/if}
                 {/if}
                 <div class="proj-actions">
                   {#if app.canEdit}
@@ -995,15 +1003,31 @@
             {#each p.milestones as m (m.id)}
               {@const md = msDrag?.id === m.id ? msDrag.d : toDay(m.date)}
               {@const mx = (md - rangeStart) * dw + dw / 2}
+              {@const mchg = app.compare?.milestonesChanged.get(m.id)}
               <div class="ms-line" style:left="{mx}px" style:top="{r.top}px" style:height="{r.height}px" style:--c={p.color}></div>
+              {#if mchg?.kind === 'moved' && mchg.live}
+                <div
+                  class="milestone ghost-ms"
+                  style:left="{(toDay(mchg.live.date) - rangeStart) * dw + dw / 2}px"
+                  style:top="{r.top + PROJ_H / 2}px"
+                  style:--c={p.color}
+                  title="{mchg.live.name}: local date {formatLong(toDay(mchg.live.date))}"
+                >
+                  <span class="diamond"></span>
+                </div>
+              {/if}
               <div
-                class="milestone"
+                class="milestone {mchg ? `chg-${mchg.kind}` : ''}"
                 class:dragging={msDrag?.id === m.id && msDrag.moved}
                 class:selected={msEdit?.id === m.id}
                 style:left="{mx}px"
                 style:top="{r.top + PROJ_H / 2}px"
                 style:--c={p.color}
-                title="{m.name}: {formatLong(md)}{msDrag?.id === m.id ? '' : '\nDrag to move, click to edit.'}"
+                title="{m.name}: {formatLong(md)}{mchg
+                  ? `\n${changeLine(mchg)}`
+                  : msDrag?.id === m.id || !app.canEdit
+                    ? ''
+                    : '\nDrag to move, click to edit.'}"
                 onpointerdown={(e) => startMsDrag(e, p, m)}
                 role="button"
                 tabindex="-1"
@@ -1122,8 +1146,22 @@
               {@const room = labelRoom.get(t.id) ?? Infinity}
               {@const lay = barLayout(g.w, t.title.length, t.assignees.length, room)}
               {@const pr = pressure.get(t.id)}
+              {@const chg = app.compare?.tasksChanged.get(t.id)}
+              {#if chg?.kind === 'moved' && chg.live && chg.live.projectId === t.projectId}
+                {@const ls = toDay(chg.live.start)}
+                <!-- Where the task sits locally, in its committed row. -->
+                <div
+                  class="ghost-bar"
+                  style:left="{(ls - rangeStart) * dw}px"
+                  style:top="{g.y}px"
+                  style:width="{(toDay(chg.live.end) - ls + 1) * dw}px"
+                  style:height="{BAR_H}px"
+                  style:--c={p?.color ?? 'var(--accent)'}
+                  title="Local dates: {formatShort(chg.live.start)} - {formatShort(chg.live.end)}"
+                ></div>
+              {/if}
               <div
-                class="bar {t.status}"
+                class="bar {t.status} {chg ? `chg-${chg.kind}` : ''}"
                 class:selected={selSet.has(t.id)}
                 class:dragging={drag?.moved && (drag.id === t.id || !!drag.group?.[t.id])}
                 class:link-target={link?.over === t.id}
@@ -1154,6 +1192,7 @@
                 {#if app.canEdit}
                   <div class="handle l" onpointerdown={(e) => startDrag(e, t, 'start')} role="presentation"></div>
                 {/if}
+                {#if chg}<div class="chg-mark"></div>{/if}
                 {#if lay.glyphInside}
                   <span class="glyph"><StatusIcon status={t.status} /></span>
                 {/if}
@@ -1571,6 +1610,57 @@
     box-shadow: 0 0 0 2px var(--c);
   }
 
+  /* Compare mode: local changes since the last commit. */
+  .chg-tag {
+    flex: none;
+    padding: 0 5px;
+    border: 1px dotted var(--text-2);
+    border-radius: 4px;
+    font-size: 10px;
+    color: var(--text-2);
+  }
+
+  .chg-tag.added {
+    border-style: dashed;
+  }
+
+  .chg-tag.removed {
+    border: 1px dashed var(--danger);
+    color: var(--danger);
+  }
+
+  .milestone.chg-added .diamond {
+    background: transparent;
+    border: 2px dashed var(--c);
+    box-shadow: none;
+  }
+
+  .milestone.chg-removed .diamond {
+    box-shadow: 0 0 0 2px var(--danger);
+  }
+
+  .milestone.chg-removed .ms-label {
+    color: var(--danger);
+    text-decoration: line-through;
+  }
+
+  .milestone.chg-moved .diamond,
+  .milestone.chg-edited .diamond {
+    box-shadow: 0 0 0 2px var(--text);
+  }
+
+  .milestone.ghost-ms {
+    z-index: 1;
+    cursor: default;
+    pointer-events: auto;
+  }
+
+  .ghost-ms .diamond {
+    background: transparent;
+    border: 2px dashed var(--c);
+    box-shadow: none;
+  }
+
   .ms-date {
     font-size: 11px;
     color: var(--text-2);
@@ -1761,6 +1851,62 @@
   .bar.link-target {
     outline: 2px dashed var(--accent);
     outline-offset: 2px;
+  }
+
+  /* Compare mode: local changes since the last commit. Kept after the
+     status rules so an added bar's fill wins over them. */
+  .ghost-bar {
+    position: absolute;
+    z-index: 2;
+    border: 2px dashed var(--c);
+    border-radius: 5px;
+    background: color-mix(in srgb, var(--c) 8%, transparent);
+  }
+
+  .bar.chg-added {
+    background: color-mix(in srgb, var(--c) 8%, var(--surface));
+    color: var(--text);
+    box-shadow: none;
+  }
+
+  .bar.chg-added .label {
+    text-shadow: none;
+  }
+
+  .bar.chg-added .glyph {
+    color: var(--text-2);
+  }
+
+  .bar.chg-removed {
+    opacity: 0.45;
+  }
+
+  .bar.chg-removed .label {
+    text-decoration: line-through;
+  }
+
+  /* Ring just outside the bar, clear of the selected/blocked outlines. */
+  .chg-mark {
+    position: absolute;
+    inset: -5px;
+    border-radius: 8px;
+    pointer-events: none;
+  }
+
+  .chg-added .chg-mark {
+    border: 2px dashed var(--c);
+  }
+
+  .chg-removed .chg-mark {
+    border: 2px dashed var(--danger);
+  }
+
+  .chg-moved .chg-mark {
+    border: 2px dashed var(--text);
+  }
+
+  .chg-edited .chg-mark {
+    border: 2px dotted var(--text);
   }
 
   /* Fades weekend days inside a bar; label and avatars sit above it. */
