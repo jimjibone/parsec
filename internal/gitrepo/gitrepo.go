@@ -84,7 +84,34 @@ func (r *Repo) run(args ...string) (string, error) {
 	return r.runEnv(nil, args...)
 }
 
+// runEnv runs git with any credentials in http(s) URLs scrubbed from the
+// output and error, since both end up in the web UI.
 func (r *Repo) runEnv(env []string, args ...string) (string, error) {
+	out, err := r.runRaw(env, args...)
+	if e, ok := errors.AsType[*Error](err); ok {
+		scrubbed := make([]string, len(e.Args))
+		for i, a := range e.Args {
+			scrubbed[i] = Redact(a)
+		}
+		e.Args, e.Output = scrubbed, Redact(e.Output)
+	}
+	return Redact(out), err
+}
+
+var (
+	urlUserPass = regexp.MustCompile(`(?i)(https?://)([^/\s:@]+):[^/\s@]+@`)
+	urlUser     = regexp.MustCompile(`(?i)(https?://)[^/\s:@*]+@`)
+)
+
+// Redact hides credentials embedded in http(s) URLs within s. A password is
+// masked and the username kept; a lone username is masked too, as hosts such
+// as GitHub accept a token in that position.
+func Redact(s string) string {
+	s = urlUserPass.ReplaceAllString(s, "${1}${2}:***@")
+	return urlUser.ReplaceAllString(s, "${1}***@")
+}
+
+func (r *Repo) runRaw(env []string, args ...string) (string, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), timeout)
 	defer cancel()
 	cmd := exec.CommandContext(ctx, "git", args...)
@@ -396,14 +423,18 @@ func (r *Repo) AbortRebase() (Result, error) {
 	return Result{Output: out}, err
 }
 
-// SetRemote sets (or replaces) the origin URL.
+// SetRemote sets (or replaces) the origin URL. Saving the redacted form of
+// the current URL unchanged leaves it as is, so its credentials survive.
 func (r *Repo) SetRemote(url string) error {
 	url = strings.TrimSpace(url)
 	if url == "" {
 		_, err := r.run("remote", "remove", "origin")
 		return err
 	}
-	if _, err := r.run("remote", "get-url", "origin"); err == nil {
+	if cur, err := r.runRaw(nil, "remote", "get-url", "origin"); err == nil {
+		if Redact(strings.TrimSpace(cur)) == url {
+			return nil
+		}
 		_, err := r.run("remote", "set-url", "origin", url)
 		return err
 	}

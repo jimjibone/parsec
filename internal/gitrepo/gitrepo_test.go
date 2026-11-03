@@ -4,6 +4,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -200,5 +201,49 @@ func TestPushWithoutRemote(t *testing.T) {
 	}
 	if _, err := r.Push(); err == nil {
 		t.Fatal("expected error")
+	}
+}
+
+func TestRedact(t *testing.T) {
+	for in, want := range map[string]string{
+		"https://alice:s3cret@example.com/team/plans.git":        "https://alice:***@example.com/team/plans.git",
+		"https://ghp_token@example.com/team/plans.git":           "https://***@example.com/team/plans.git",
+		"fatal: unable to access 'http://bob:pw@example.com/x/'": "fatal: unable to access 'http://bob:***@example.com/x/'",
+		"https://example.com/team/plans.git":                     "https://example.com/team/plans.git",
+		"git@example.com:team/plans.git":                         "git@example.com:team/plans.git",
+		"ssh://git@example.com/team/plans.git":                   "ssh://git@example.com/team/plans.git",
+		"https://alice:***@example.com/x":                        "https://alice:***@example.com/x",
+		"https://***@example.com/x":                              "https://***@example.com/x",
+	} {
+		if got := Redact(in); got != want {
+			t.Errorf("Redact(%q) = %q, want %q", in, got, want)
+		}
+	}
+}
+
+func TestRemoteCredentialsHidden(t *testing.T) {
+	isolate(t)
+	r, err := Open(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	const secret = "https://alice:s3cret@example.com/team/plans.git"
+	if err := r.SetRemote(secret); err != nil {
+		t.Fatal(err)
+	}
+	st, err := r.Status()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if st.Remote != "https://alice:***@example.com/team/plans.git" {
+		t.Fatalf("remote = %q", st.Remote)
+	}
+
+	// Saving the redacted URL back must keep the real one.
+	if err := r.SetRemote(st.Remote); err != nil {
+		t.Fatal(err)
+	}
+	if got, _ := r.runRaw(nil, "remote", "get-url", "origin"); strings.TrimSpace(got) != secret {
+		t.Fatalf("stored remote = %q", got)
 	}
 }
