@@ -243,19 +243,6 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("POST /api/git/push", s.require(auth.RoleAdmin, s.locked(s.gitOp(s.repo.Push, false))))
 	mux.HandleFunc("POST /api/git/sync", s.require(auth.RoleAdmin, s.locked(s.gitOp(s.repo.Sync, true))))
 	mux.HandleFunc("POST /api/git/abort-rebase", s.require(auth.RoleAdmin, s.locked(s.gitOp(s.repo.AbortRebase, true))))
-	mux.HandleFunc("PUT /api/git/remote", s.require(auth.RoleAdmin, s.locked(func(w http.ResponseWriter, r *http.Request) {
-		var body struct {
-			URL string `json:"url"`
-		}
-		if !readJSON(w, r, &body) {
-			return
-		}
-		if err := s.repo.SetRemote(body.URL); err != nil {
-			writeError(w, err)
-			return
-		}
-		respond(w)(s.repo.Status())
-	})))
 
 	mux.HandleFunc("GET /api/history", s.require(auth.RoleViewer, s.locked(func(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusOK, s.history.State(userOf(r).Username))

@@ -423,18 +423,14 @@ func (r *Repo) AbortRebase() (Result, error) {
 	return Result{Output: out}, err
 }
 
-// SetRemote sets (or replaces) the origin URL. Saving the redacted form of
-// the current URL unchanged leaves it as is, so its credentials survive.
+// SetRemote sets (or replaces) the origin URL.
 func (r *Repo) SetRemote(url string) error {
 	url = strings.TrimSpace(url)
 	if url == "" {
 		_, err := r.run("remote", "remove", "origin")
 		return err
 	}
-	if cur, err := r.runRaw(nil, "remote", "get-url", "origin"); err == nil {
-		if Redact(strings.TrimSpace(cur)) == url {
-			return nil
-		}
+	if _, err := r.run("remote", "get-url", "origin"); err == nil {
 		_, err := r.run("remote", "set-url", "origin", url)
 		return err
 	}

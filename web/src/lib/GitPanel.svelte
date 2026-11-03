@@ -11,8 +11,6 @@
   let output = $state('');
   let failed = $state(false);
   let log = $state<GitCommit[]>([]);
-  let remoteDraft = $state('');
-  let editingRemote = $state(false);
 
   const git = $derived(app.git);
 
@@ -52,16 +50,6 @@
     if (!failed) message = '';
   }
 
-  async function saveRemote() {
-    try {
-      app.git = await api.gitSetRemote(remoteDraft);
-      editingRemote = false;
-    } catch (e) {
-      failed = true;
-      output = String((e as Error).message);
-    }
-  }
-
   function codeLabel(code: string): string {
     const c = code.trim();
     if (c === '??' || c.includes('A')) return 'added';
@@ -96,20 +84,7 @@
       </div>
       <div class="remote">
         <span class="muted">Remote</span>
-        {#if editingRemote}
-          <input type="text" bind:value={remoteDraft} placeholder="git@example.com:team/plans.git" />
-          <button onclick={saveRemote}>Save</button>
-          <button class="ghost" onclick={() => (editingRemote = false)}>Cancel</button>
-        {:else}
-          <code>{git.remote || 'none'}</code>
-          <button
-            class="ghost"
-            onclick={() => {
-              remoteDraft = git.remote;
-              editingRemote = true;
-            }}>Edit</button
-          >
-        {/if}
+        <code>{git.remote || 'none'}</code>
       </div>
       {#if git.ahead || git.behind}
         <div class="muted">{git.ahead} to push, {git.behind} to pull (as of last fetch)</div>
@@ -165,7 +140,7 @@
       {#if busy}<span class="muted">{busy}...</span>{/if}
     </section>
     {#if !git.remote}
-      <p class="muted small">Set a remote to enable pull, push and sync.</p>
+      <p class="muted small">Set <code>git.remote</code> in the config to enable pull, push and sync.</p>
     {/if}
 
     {#if output}
@@ -249,10 +224,6 @@
     display: flex;
     align-items: center;
     gap: 6px;
-  }
-
-  .remote input {
-    flex: 1;
   }
 
   code {

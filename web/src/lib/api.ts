@@ -91,7 +91,6 @@ export const api = {
   gitPush: () => req<{ output: string }>('POST', '/api/git/push'),
   gitSync: () => req<{ output: string }>('POST', '/api/git/sync'),
   gitAbortRebase: () => req<{ output: string }>('POST', '/api/git/abort-rebase'),
-  gitSetRemote: (url: string) => req<GitStatus>('PUT', '/api/git/remote', { url }),
 
   history: () => req<HistoryState>('GET', '/api/history'),
   undo: () => req<HistoryStep>('POST', '/api/history/undo'),

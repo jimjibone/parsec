@@ -238,11 +238,6 @@ func TestRemoteCredentialsHidden(t *testing.T) {
 	if st.Remote != "https://alice:***@example.com/team/plans.git" {
 		t.Fatalf("remote = %q", st.Remote)
 	}
-
-	// Saving the redacted URL back must keep the real one.
-	if err := r.SetRemote(st.Remote); err != nil {
-		t.Fatal(err)
-	}
 	if got, _ := r.runRaw(nil, "remote", "get-url", "origin"); strings.TrimSpace(got) != secret {
 		t.Fatalf("stored remote = %q", got)
 	}

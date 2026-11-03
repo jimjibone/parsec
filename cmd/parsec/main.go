@@ -68,6 +68,11 @@ func main() {
 	if err != nil {
 		log.Fatalf("open data repo: %v", err)
 	}
+	if cfg.Git.Remote != "" {
+		if err := repo.SetRemote(cfg.Git.Remote); err != nil {
+			log.Fatalf("set remote: %v", err)
+		}
+	}
 	st, err := store.Open(cfg.Data)
 	if err != nil {
 		log.Fatalf("load data: %v", err)

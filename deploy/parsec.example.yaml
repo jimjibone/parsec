@@ -41,6 +41,9 @@ auth:
     label: GitLab
 
 git:
+  # Set as the data repository's origin at startup. Leave unset to keep the
+  # existing origin of the clone.
+  # remote: git@gitlab.example.com:team/plans.git
   # Commit each person's changes, under their name, once they have not
   # edited for `idle`. Defaults to on when sign-in is enabled.
   autoCommit: true

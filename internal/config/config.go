@@ -60,6 +60,9 @@ type OIDC struct {
 }
 
 type Git struct {
+	// Remote is set as the data repository's origin at startup. Empty leaves
+	// any existing origin alone.
+	Remote string `yaml:"remote"`
 	// AutoCommit commits each user's changes after they stop editing for
 	// Idle. Defaults to on when sign-in is enabled.
 	AutoCommit *bool         `yaml:"autoCommit"`

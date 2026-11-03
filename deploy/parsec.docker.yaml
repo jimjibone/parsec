@@ -24,7 +24,8 @@ auth:
   # admins: [alice]
 
 git:
+  # Set as the data repository's origin at startup.
+  # remote: git@example.com:team/plans.git
   # Each person's changes are committed under their name once they stop
-  # editing for this long; with a remote set (git panel), parsec then pulls
-  # and pushes.
+  # editing for this long; with a remote set, parsec then pulls and pushes.
   idle: 5m

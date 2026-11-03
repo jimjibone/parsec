@@ -63,8 +63,8 @@ come from git.
   first change.
 - Projects & tasks view: sortable, filterable task table, project editor
   (name, colour, description, milestones), people list.
-- Git panel: changed files, commit, pull (rebase), push, sync, remote URL,
-  history, abort a conflicted rebase.
+- Git panel: changed files, commit, pull (rebase), push, sync, remote URL
+  (credentials masked), history, abort a conflicted rebase.
 - Compare with the last commit: the clock button next to the git button
   shows the data as of HEAD, read-only, with local changes marked. Tasks
   and milestones moved since get a dashed ring plus a dashed ghost at their
@@ -123,7 +123,7 @@ settings panel. Create the first admin before `up`: accounts are loaded at
 start, so `passwd` against a running server is overwritten by later edits
 in the app.
 
-- **Sync.** Set a remote in the git panel. For an SSH remote, mount a
+- **Sync.** Set `git.remote` in the config. For an SSH remote, mount a
   directory with a deploy key and `known_hosts` at `/home/parsec/.ssh` (see
   the compose file). The container runs as uid 10001.
 - **HTTPS.** Put a reverse proxy in front (see [Shared server](#shared-server))
