@@ -7,7 +7,9 @@ build: web server
 web: web/node_modules
 	cd web && npm run build
 
-web/node_modules: web/package.json
+# Reinstall when either file changes; a lockfile-only change (e.g. a pull
+# that adds a dependency) would otherwise leave node_modules stale.
+web/node_modules: web/package.json web/package-lock.json
 	cd web && npm install --no-audit --no-fund
 	touch web/node_modules
 
