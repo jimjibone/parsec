@@ -725,7 +725,8 @@
 
   let renaming = $state<string | null>(null);
   let newProject = $state<string | null>(null);
-  let hiddenOpen = $state(false);
+  let filterOpen = $state(false);
+  let filterWrap = $state<HTMLDivElement>();
 
   async function createProject() {
     const name = newProject?.trim();
@@ -744,7 +745,25 @@
     el.select();
   }
 
-  const hiddenProjects = $derived(app.projects.filter((p) => ui.hidden.includes(p.id)));
+  // Counts only existing projects, ignoring stale ids for removed ones.
+  const hiddenCount = $derived(app.projects.filter((p) => ui.hidden.includes(p.id)).length);
+
+  // Close the project filter on a click outside it or Escape.
+  $effect(() => {
+    if (!filterOpen) return;
+    const onDown = (ev: PointerEvent) => {
+      if (!filterWrap?.contains(ev.target as Node)) filterOpen = false;
+    };
+    const onEsc = (ev: KeyboardEvent) => {
+      if (ev.key === 'Escape') filterOpen = false;
+    };
+    window.addEventListener('pointerdown', onDown);
+    window.addEventListener('keydown', onEsc);
+    return () => {
+      window.removeEventListener('pointerdown', onDown);
+      window.removeEventListener('keydown', onEsc);
+    };
+  });
 
   function summary(p: Project) {
     const ts = app.tasks.filter((t) => t.projectId === p.id);
@@ -820,33 +839,36 @@
         <button class="ghost icon-btn" onclick={() => (ui.highlight = '')} aria-label="Clear highlight"><Icon name="x" size={14} /></button>
       {/if}
     </div>
-    {#if hiddenProjects.length}
-      <div class="menu-wrap">
-        <button class="ghost" onclick={() => (hiddenOpen = !hiddenOpen)}><Icon name="eyeOff" /> {hiddenProjects.length} hidden</button>
-        {#if hiddenOpen}
-          <div class="menu">
-            {#each hiddenProjects as p (p.id)}
-              <button
-                class="ghost"
-                onclick={() => {
-                  ui.setHidden(p.id, false);
-                  if (hiddenProjects.length <= 1) hiddenOpen = false;
-                }}
-              >
-                <span class="dot" style:background={p.color}></span>{p.name}<Icon name="eye" />
-              </button>
-            {/each}
-            <button
-              class="ghost"
-              onclick={() => {
-                ui.hidden = [];
-                hiddenOpen = false;
-              }}>Show all</button
+    <div class="menu-wrap" bind:this={filterWrap}>
+      <button
+        class="ghost"
+        class:on={hiddenCount > 0}
+        aria-expanded={filterOpen}
+        onclick={() => (filterOpen = !filterOpen)}
+        title="Choose which projects show on the timeline (this browser only)"
+        ><Icon name={hiddenCount ? 'eyeOff' : 'eye'} /> Projects{#if hiddenCount}&nbsp;{app.projects.length - hiddenCount}/{app.projects.length}{/if}</button
+      >
+      {#if filterOpen}
+        <div class="menu filter-menu">
+          <div class="filter-actions">
+            <button class="ghost" disabled={!hiddenCount} onclick={() => (ui.hidden = [])}>Show all</button>
+            <button class="ghost" disabled={hiddenCount === app.projects.length} onclick={() => (ui.hidden = app.projects.map((p) => p.id))}
+              >Hide all</button
             >
           </div>
-        {/if}
-      </div>
-    {/if}
+          <div class="filter-list">
+            {#each app.projects as p (p.id)}
+              <label class="filter-item">
+                <input type="checkbox" checked={!ui.hidden.includes(p.id)} onchange={(e) => ui.setHidden(p.id, !e.currentTarget.checked)} />
+                <span class="dot" style:background={p.color}></span><span class="filter-name">{p.name}</span>
+              </label>
+            {:else}
+              <span class="muted filter-empty">No projects</span>
+            {/each}
+          </div>
+        </div>
+      {/if}
+    </div>
     <div class="spacer"></div>
     {#if app.canEdit}
       <span class="hint muted"
@@ -1330,6 +1352,45 @@
 
   .menu button {
     justify-content: flex-start;
+  }
+
+  .filter-actions {
+    display: flex;
+    gap: 4px;
+    padding-bottom: 4px;
+    margin-bottom: 4px;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .filter-list {
+    display: flex;
+    flex-direction: column;
+    max-height: 60vh;
+    overflow-y: auto;
+  }
+
+  .filter-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 4px 8px;
+    border-radius: 6px;
+    cursor: pointer;
+  }
+
+  .filter-item:hover {
+    background: var(--surface-2);
+  }
+
+  .filter-name {
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    max-width: 280px;
+  }
+
+  .filter-empty {
+    padding: 4px 8px;
   }
 
   .scroller {
