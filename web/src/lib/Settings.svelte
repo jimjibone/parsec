@@ -250,9 +250,30 @@
       {#each ROLES as r, i (r.id)}<b>{r.label}</b>: {r.hint.toLowerCase()}{i < ROLES.length - 1 ? '. ' : '.'}{/each}
     </p>
   {/if}
+
+  {#if app.version}
+    <p class="muted small about">
+      <span title={app.version.commit || 'Build commit unknown'}>{app.versionText}</span>
+      {#if app.version.update}
+        - <a href={app.version.update.url} target="_blank" rel="noopener noreferrer"
+          >update available ({app.version.update.behind} commit{app.version.update.behind === 1 ? '' : 's'} behind main)</a
+        >
+      {/if}
+    </p>
+  {/if}
 </aside>
 
 <style>
+  .about {
+    margin-top: auto;
+    padding-top: 12px;
+    border-top: 1px solid var(--border);
+  }
+
+  .about a {
+    color: var(--accent);
+  }
+
   .backdrop {
     position: fixed;
     inset: 0;

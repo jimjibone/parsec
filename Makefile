@@ -12,7 +12,7 @@ web/node_modules: web/package.json
 	touch web/node_modules
 
 server:
-	go build -o parsec ./cmd/parsec
+	go build -ldflags "-X parsec/internal/version.BuildDate=$$(date -u +%Y-%m-%dT%H:%M:%SZ)" -o parsec ./cmd/parsec
 
 # Development: run both in separate terminals, then open http://localhost:5173
 dev-server:

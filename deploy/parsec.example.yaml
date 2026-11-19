@@ -51,3 +51,7 @@ git:
   # After each automatic commit, pull --rebase and push to the remote
   # (if one is set). Defaults to on when sign-in is enabled.
   push: true
+
+# Ask GitHub every few hours whether main has moved past this build, and
+# show "update available" in the web UI. Defaults to on.
+updateCheck: true

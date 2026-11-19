@@ -26,6 +26,7 @@ import (
 	"parsec/internal/gitrepo"
 	"parsec/internal/history"
 	"parsec/internal/store"
+	"parsec/internal/version"
 	"parsec/internal/webui"
 )
 
@@ -90,6 +91,12 @@ func main() {
 		srv.RunCommitter(ctx)
 		close(committerDone)
 	}()
+	build := version.Current()
+	if *cfg.UpdateCheck {
+		updates := version.NewChecker(build)
+		srv.SetUpdates(updates)
+		go updates.Run(ctx, 6*time.Hour)
+	}
 
 	hs := &http.Server{Addr: cfg.Addr, Handler: srv.Handler(), ReadHeaderTimeout: 10 * time.Second}
 	go func() {
@@ -99,7 +106,7 @@ func main() {
 		hs.Shutdown(sctx) // open event streams are cut off at the deadline
 	}()
 
-	log.Printf("parsec: data %s, auth %s, listening on http://%s", cfg.Data, cfg.Auth.Mode, cfg.Addr)
+	log.Printf("parsec %s: data %s, auth %s, listening on http://%s", build.Short(), cfg.Data, cfg.Auth.Mode, cfg.Addr)
 	if cfg.Shared() && !*cfg.Git.AutoCommit {
 		log.Printf("parsec: automatic commits are off; an admin commits from the git panel")
 	}

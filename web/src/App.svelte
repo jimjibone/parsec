@@ -14,8 +14,13 @@
     app.start();
     const onFocus = () => app.loaded && app.refreshGit();
     window.addEventListener('focus', onFocus);
+    let ticks = 0;
     const timer = setInterval(() => {
-      if (app.loaded) app.refreshGit();
+      if (app.loaded) {
+        app.refreshGit();
+        // Every 30 minutes; the server itself asks GitHub far less often.
+        if (++ticks % 30 === 0) app.refreshVersion();
+      }
       // Waiting for access: there is no event stream, so check now and then.
       else if (app.me?.user && app.role === 'none') app.start();
     }, 60_000);
@@ -37,6 +42,10 @@
   // In shared mode only admins drive git; everyone else sees nothing of it.
   const showGit = $derived(!app.shared || app.isAdmin);
   let userMenu = $state(false);
+  const update = $derived(app.version?.update ?? null);
+  const updateTitle = $derived(
+    update ? `A newer parsec is out: main is ${update.behind} commit${update.behind === 1 ? '' : 's'} ahead of this build. Click to see what changed.` : '',
+  );
 
   const mac = /Mac|iPhone|iPad/.test(navigator.platform);
   const mod = mac ? 'Cmd+' : 'Ctrl+';
@@ -103,6 +112,13 @@
       </nav>
 
       <div class="spacer"></div>
+
+      {#if update && (app.role === 'editor' || app.role === 'admin')}
+        <!-- Everyone sees updates in the menu; the chip is for those who manage the server. -->
+        <a class="update-chip" href={update.url} target="_blank" rel="noopener noreferrer" title={updateTitle}>
+          <Icon name="up" size={14} /> Update available
+        </a>
+      {/if}
 
       <button
         class="ghost conn {app.connection}"
@@ -185,6 +201,14 @@
               </div>
               <button class="ghost" onclick={() => (ui.settingsOpen = true)}>Settings</button>
               <button class="ghost" onclick={() => app.logout()}>Sign out</button>
+              {#if app.version}
+                <div class="menu-foot muted">
+                  <span title={app.version.commit || 'Build commit unknown'}>{app.versionText}</span>
+                  {#if update}
+                    <a href={update.url} target="_blank" rel="noopener noreferrer" title={updateTitle}>update available</a>
+                  {/if}
+                </div>
+              {/if}
             </div>
           {/if}
         </div>
@@ -442,6 +466,41 @@
     border-bottom: 1px solid var(--border);
     margin-bottom: 4px;
     font-size: 13px;
+  }
+
+  .menu-foot {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    gap: 2px 8px;
+    padding: 8px 8px 4px;
+    border-top: 1px solid var(--border);
+    margin-top: 4px;
+    font-size: 12px;
+  }
+
+  .menu-foot a,
+  .update-chip {
+    color: var(--accent);
+  }
+
+  .update-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 3px 10px;
+    border: 1px solid var(--accent);
+    border-radius: 999px;
+    background: var(--accent-soft);
+    font-size: 12px;
+    font-weight: 600;
+    text-decoration: none;
+    white-space: nowrap;
+  }
+
+  .update-chip:hover {
+    background: var(--accent);
+    color: var(--accent-text);
   }
 
   .row {

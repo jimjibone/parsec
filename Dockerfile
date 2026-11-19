@@ -13,13 +13,18 @@ RUN npm run build
 
 FROM --platform=$BUILDPLATFORM golang:1.26-alpine AS server
 ARG TARGETOS TARGETARCH
+# The commit being built (the source has no .git); shown in the web UI and
+# compared with main for update checks.
+ARG VERSION=
+# Build time, RFC 3339, shown next to the version.
+ARG BUILD_DATE=
 WORKDIR /src
 COPY go.mod go.sum ./
 RUN go mod download
 COPY cmd ./cmd
 COPY internal ./internal
 COPY --from=web /src/internal/webui/dist ./internal/webui/dist
-RUN CGO_ENABLED=0 GOOS=$TARGETOS GOARCH=$TARGETARCH go build -trimpath -ldflags="-s -w" -o /out/parsec ./cmd/parsec
+RUN CGO_ENABLED=0 GOOS=$TARGETOS GOARCH=$TARGETARCH go build -trimpath -ldflags="-s -w -X parsec/internal/version.Commit=${VERSION} -X parsec/internal/version.BuildDate=${BUILD_DATE}" -o /out/parsec ./cmd/parsec
 
 FROM alpine:3.24
 # git does the storage and sync; ssh is for pushing to an SSH remote.

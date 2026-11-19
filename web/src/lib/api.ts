@@ -1,4 +1,4 @@
-import type { GitCommit, GitStatus, HistoryState, Me, Person, Planning, Project, Snapshot, Task, User, UserSettings } from './types';
+import type { GitCommit, GitStatus, HistoryState, Me, Person, Planning, Project, Snapshot, Task, User, UserSettings, VersionInfo } from './types';
 
 export class ApiError extends Error {
   status: number;
@@ -63,6 +63,7 @@ interface HistoryStep {
 
 export const api = {
   me: () => req<Me>('GET', '/api/me'),
+  version: () => req<VersionInfo>('GET', '/api/version'),
   localLogin: (username: string, password: string) => req<void>('POST', '/auth/login', { username, password }),
   logout: () => req<void>('POST', '/auth/logout'),
 

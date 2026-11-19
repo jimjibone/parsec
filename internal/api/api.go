@@ -19,6 +19,7 @@ import (
 	"parsec/internal/gitrepo"
 	"parsec/internal/history"
 	"parsec/internal/store"
+	"parsec/internal/version"
 )
 
 type Server struct {
@@ -29,6 +30,8 @@ type Server struct {
 	history *history.History
 	events  *hub
 	ui      fs.FS
+	// updates reports newer builds; nil when update checks are off.
+	updates *version.Checker
 
 	// mu serialises writes and git operations so a pull never races a save.
 	// It also guards the fields below.
@@ -50,6 +53,9 @@ func New(cfg *config.Config, a *auth.Auth, s *store.Store, r *gitrepo.Repo, h *h
 	}
 }
 
+// SetUpdates makes the server report c's update checks to editors and admins.
+func (s *Server) SetUpdates(c *version.Checker) { s.updates = c }
+
 func (s *Server) Handler() http.Handler {
 	mux := http.NewServeMux()
 	s.auth.Routes(mux)
@@ -61,6 +67,17 @@ func (s *Server) Handler() http.Handler {
 		}
 		writeJSON(w, http.StatusOK, body)
 	})
+
+	// The running build and any newer one on main.
+	mux.HandleFunc("GET /api/version", s.require(auth.RoleViewer, func(w http.ResponseWriter, r *http.Request) {
+		b := version.Current()
+		writeJSON(w, http.StatusOK, struct {
+			Version string          `json:"version"`
+			Commit  string          `json:"commit"`
+			Built   string          `json:"built"`
+			Update  *version.Update `json:"update"`
+		}{b.Short(), b.Commit, b.Built, s.updates.Update()})
+	}))
 
 	mux.HandleFunc("GET /api/state", s.require(auth.RoleViewer, func(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusOK, s.store.Snapshot())

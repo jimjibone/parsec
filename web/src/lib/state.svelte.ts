@@ -17,6 +17,7 @@ import {
   type Project,
   type Snapshot,
   type Task,
+  type VersionInfo,
 } from './types';
 
 /** How long a lost connection shows as "reconnecting" before "offline". */
@@ -53,6 +54,17 @@ class AppState {
   loaded = $state(false);
   loadError = $state('');
   git = $state<GitStatus | null>(null);
+  /** The running build and any newer one. */
+  version = $state<VersionInfo | null>(null);
+  /** e.g. "parsec abc1234, built 19 Nov 2026"; empty until known. */
+  versionText = $derived.by(() => {
+    const v = this.version;
+    if (!v) return '';
+    const d = v.built ? new Date(v.built) : null;
+    const built =
+      d && !isNaN(d.getTime()) ? `, built ${d.toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' })}` : '';
+    return `parsec ${v.version}${built}`;
+  });
   history = $state<HistoryState>({ undo: '', redo: '' });
   toasts = $state<Toast[]>([]);
 
@@ -299,6 +311,16 @@ class AppState {
       if (!this.loaded || !(e instanceof ApiError && e.status === 0)) this.loadError = String((e as Error).message ?? e);
     }
     this.refreshGit();
+    this.refreshVersion();
+  }
+
+  /** The server checks for updates itself; this only reads its answer. */
+  async refreshVersion() {
+    try {
+      this.version = await api.version();
+    } catch {
+      /* keep the last answer */
+    }
   }
 
   toast(text: string, kind: Toast['kind'] = 'error') {

@@ -727,6 +727,25 @@
   let newProject = $state<string | null>(null);
   let filterOpen = $state(false);
   let filterWrap = $state<HTMLDivElement>();
+  let helpOpen = $state(false);
+  let helpWrap = $state<HTMLDivElement>();
+
+  // Close the help on a click outside it or Escape.
+  $effect(() => {
+    if (!helpOpen) return;
+    const onDown = (ev: PointerEvent) => {
+      if (!helpWrap?.contains(ev.target as Node)) helpOpen = false;
+    };
+    const onEsc = (ev: KeyboardEvent) => {
+      if (ev.key === 'Escape') helpOpen = false;
+    };
+    window.addEventListener('pointerdown', onDown);
+    window.addEventListener('keydown', onEsc);
+    return () => {
+      window.removeEventListener('pointerdown', onDown);
+      window.removeEventListener('keydown', onEsc);
+    };
+  });
 
   async function createProject() {
     const name = newProject?.trim();
@@ -871,10 +890,26 @@
     </div>
     <div class="spacer"></div>
     {#if app.canEdit}
-      <span class="hint muted"
-        >Double-click a lane to add a task, or a project's top strip to add a milestone. Drag the dot on a bar's right edge to link.
-        Alt+arrows move the selected task. Cmd/Ctrl-click or Shift-drag selects several to move together.</span
-      >
+      <div class="menu-wrap" bind:this={helpWrap}>
+        <button
+          class="ghost icon-btn help-btn"
+          class:on={helpOpen}
+          aria-expanded={helpOpen}
+          aria-label="Timeline help"
+          title="How to edit the timeline"
+          onclick={() => (helpOpen = !helpOpen)}>?</button
+        >
+        {#if helpOpen}
+          <div class="menu help-menu" role="note">
+            <ul>
+              <li>Double-click a lane to add a task, or a project's top strip to add a milestone.</li>
+              <li>Drag the dot on a bar's right edge to another task to link them.</li>
+              <li>Alt+arrows move the selected task.</li>
+              <li>Cmd/Ctrl-click or Shift-drag selects several to move together.</li>
+            </ul>
+          </div>
+        {/if}
+      </div>
     {:else}
       <span class="hint muted">View only</span>
     {/if}
@@ -1352,6 +1387,32 @@
 
   .menu button {
     justify-content: flex-start;
+  }
+
+  /* Square, as tall as the toolbar's other buttons. */
+  .help-btn {
+    width: 32px;
+    height: 32px;
+    padding: 0;
+    justify-content: center;
+    font-weight: 700;
+  }
+
+  /* Opens leftwards: the button sits at the right end of the toolbar. */
+  .help-menu {
+    left: auto;
+    right: 0;
+    width: 340px;
+    padding: 8px 12px;
+    font-size: 13px;
+  }
+
+  .help-menu ul {
+    margin: 0;
+    padding-left: 18px;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
   }
 
   .filter-actions {

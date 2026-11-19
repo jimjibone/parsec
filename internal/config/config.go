@@ -33,6 +33,9 @@ type Config struct {
 	StateDir string `yaml:"stateDir"`
 	Auth     Auth   `yaml:"auth"`
 	Git      Git    `yaml:"git"`
+	// UpdateCheck asks GitHub every few hours whether a newer build is out,
+	// and says so in the web UI. Defaults to on.
+	UpdateCheck *bool `yaml:"updateCheck"`
 }
 
 type Auth struct {
@@ -109,6 +112,10 @@ func (c *Config) Finish() error {
 	}
 	if c.Git.Idle == 0 {
 		c.Git.Idle = 5 * time.Minute
+	}
+	if c.UpdateCheck == nil {
+		on := true
+		c.UpdateCheck = &on
 	}
 	shared := c.Auth.Mode != ModeNone
 	if c.Git.AutoCommit == nil {

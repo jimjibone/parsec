@@ -82,6 +82,17 @@ export interface Me {
   user: User | null;
 }
 
+/** The running build, from /api/version. */
+export interface VersionInfo {
+  /** Short commit, or "dev" when unknown. */
+  version: string;
+  commit: string;
+  /** Build time, RFC 3339; empty when unknown. */
+  built: string;
+  /** Newer commits on main, or null when current or unknown. */
+  update: { behind: number; url: string; checkedAt: string } | null;
+}
+
 export interface UserSettings {
   defaultRole: Role;
 }
